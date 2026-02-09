@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "숲똑",
+    "slug": "sooptalk",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "sooptalk",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.sooptalk.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.sooptalk.app"
+    }
+  }
+}

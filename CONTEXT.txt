@@ -1,0 +1,346 @@
+================================================================================
+숲똑 (SoopTalk) — 전체 프로젝트 컨텍스트 + 다음 작업 TODO
+================================================================================
+최종 업데이트: 2026-02-08
+현재 상태: Phase 3 완료, Phase 4 미착수
+빌드 상태: pnpm run build 성공 (shared, server, admin, mobile 전체)
+
+################################################################################
+# PART 1: PRD 요약
+################################################################################
+
+제품명: 숲똑 — 숲체험 예약 플랫폼
+목적: 부모에게 "신뢰할 수 있는 자연 교육 기회", 강사에게 "활동 집중 운영 효율" 제공
+
+타겟 유저:
+  - PARENT (부모): 주말 아이 활동, 쉬운 예약/결제, 사진 확인
+  - INSTRUCTOR (강사): 수강생 관리, 공지 자동화, 포트폴리오
+  - ADMIN: 정산, 콘텐츠 검수
+
+테크 스택:
+  - Monorepo: Turborepo + pnpm workspaces
+  - Mobile App: React Native (Expo)
+  - Admin/Instructor Web: Next.js (App Router)
+  - Backend API: NestJS
+  - Shared: @sooptalk/shared (공통 타입, 상수)
+  - Database: PostgreSQL + Prisma ORM
+  - Cache/Lock: Redis (ioredis)
+  - Storage: AWS S3 (Pre-signed URL + sharp 썸네일)
+  - Push: Firebase FCM (firebase-admin)
+  - Payment: PortOne V2 REST API
+  - Scheduling: @nestjs/schedule (cron)
+
+개발 로드맵:
+  Phase 0: 프로젝트 초기 세팅 (모노레포)          ← 완료
+  Phase 1: Auth + 프로그램 조회 + 단순 예약 (MVP)  ← 완료
+  Phase 2: 결제 모듈 + 강사 관리 고도화            ← 완료
+  Phase 3: 알림 자동화 + 사진첩 고도화             ← 완료
+  Phase 4: 정산 시스템 + 어드민 대시보드            ← 미착수
+
+################################################################################
+# PART 2: Phase 0~1 요약 (초기 세팅 + MVP)
+################################################################################
+
+[Phase 0 — 모노레포 세팅]
+  - Turborepo + pnpm workspaces 구성
+  - apps/server (NestJS), apps/admin (Next.js), apps/mobile (Expo RN)
+  - packages/shared (타입/상수 공유 라이브러리)
+  - ESLint + Prettier 통합
+
+[Phase 1 — Auth + 프로그램 + 예약 MVP]
+  - AuthModule: JWT 인증, 카카오 OAuth, 로컬 회원가입, Role 가드
+  - ProgramsModule: CRUD (강사가 활동 등록/수정)
+  - ReservationsModule: 예약 생성/조회/취소 (당시 즉시 CONFIRMED)
+  - Swagger 문서 (/api-docs)
+
+################################################################################
+# PART 3: Phase 2 요약 (결제 + 출석)
+################################################################################
+
+[결제 플로우]
+  POST /reservations → PENDING 생성 (Redis 분산 락)
+  POST /payments/prepare → Payment PENDING + PortOne 사전등록
+  클라이언트 PortOne SDK 결제 → POST /payments/webhook
+  → Payment PAID + Reservation CONFIRMED + Attendance(QR) 자동 생성
+
+[취소/환불 플로우]
+  PATCH /reservations/:id/cancel → 환불 비율 계산(2일전100%, 1일전50%, 당일0%)
+  → PortOne 환불 API → Payment REFUNDED/PARTIAL_REFUND
+
+[출석]
+  POST /attendance/check — 수동 출석 (INSTRUCTOR)
+  GET /attendance/qr/:reservationId — QR 코드 조회
+  POST /attendance/qr/verify — QR 스캔 출석 확인 (INSTRUCTOR)
+
+################################################################################
+# PART 4: Phase 3 완료 현황 (알림 + 사진첩)
+################################################################################
+
+[StorageModule] @Global()
+  - S3 클라이언트 래퍼: generateUploadUrl, generateDownloadUrl, downloadObject, uploadObject, deleteObject
+
+[FcmModule] @Global()
+  - firebase-admin 초기화 (onModuleInit)
+  - sendToUser(단일), sendToMultipleUsers(멀티캐스트)
+  - Firebase 설정 없으면 graceful 비활성화
+
+[NotificationsModule]
+  - createAndSend: DB 저장 + FCM Push 발송
+  - findAllForUser: 커서 기반 페이지네이션 (cursor + limit)
+  - markAsRead / markAllAsRead / getUnreadCount
+
+[GalleryModule]
+  - requestUploadUrls: 강사 검증 → S3 키 생성(gallery/{programId}/{uuid}.ext) → Pre-signed PUT URL
+  - confirmUpload: 강사 검증 → S3 다운로드 → sharp 썸네일(400px, 80%) → 썸네일 업로드 → Gallery DB → 예약자 FCM 알림
+  - findByProgram: 접근 권한(참여자/강사) → Signed GET URL (원본+썸네일)
+  - delete: 강사 검증 → S3 삭제(원본+썸네일) → DB 삭제
+
+[CronModule]
+  - @Cron(EVERY_HOUR): scheduleAt이 23~24시간 뒤인 프로그램 조회
+  - CONFIRMED 예약 사용자에게 PRE_ACTIVITY 알림
+  - Redis 키(notification:sent:pre_activity:{programId}, TTL 48h) 중복 방지
+
+[RedisService 확장]
+  - 기존: acquireLock, releaseLock
+  - 추가: set, get, sAdd, sIsMember, expire
+
+[programs.service.ts 수정]
+  - findOne: gallery: true → _count: { select: { gallery: true } }
+
+################################################################################
+# PART 5: 현재 전체 코드 구조
+################################################################################
+
+apps/server/src/
+  app.module.ts           — ConfigModule, PrismaModule, RedisModule, StorageModule, FcmModule,
+                            AuthModule, ProgramsModule, ReservationsModule, PaymentsModule,
+                            AttendanceModule, NotificationsModule, GalleryModule, CronModule
+  main.ts                 — NestJS 부트스트랩 + Swagger 설정
+  prisma/
+    prisma.module.ts      — @Global() PrismaModule
+    prisma.service.ts     — PrismaClient 래퍼
+    schema.prisma         — 7개 모델, 6개 enum (아래 참조)
+  redis/
+    redis.module.ts       — @Global()
+    redis.service.ts      — acquireLock, releaseLock, set, get, sAdd, sIsMember, expire
+  storage/
+    storage.module.ts     — @Global()
+    storage.service.ts    — S3 클라이언트 래퍼
+  fcm/
+    fcm.module.ts         — @Global()
+    fcm.service.ts        — Firebase Admin 래퍼
+  auth/
+    auth.module.ts, auth.controller.ts, auth.service.ts
+    jwt.strategy.ts, jwt-auth.guard.ts, roles.guard.ts, roles.decorator.ts
+    dto/ (register, login, kakao-login)
+  programs/
+    programs.module.ts, programs.controller.ts, programs.service.ts
+    dto/ (create-program, update-program, query-program)
+  reservations/
+    reservations.module.ts (imports: PaymentsModule)
+    reservations.controller.ts, reservations.service.ts
+    dto/ (create-reservation, query-reservation)
+  payments/
+    payments.module.ts (exports: PaymentsService)
+    payments.controller.ts, payments.service.ts, portone.service.ts
+    dto/ (prepare-payment, webhook-payload)
+  attendance/
+    attendance.module.ts
+    attendance.controller.ts, attendance.service.ts
+    dto/ (mark-attendance, verify-qr)
+  notifications/
+    notifications.module.ts (exports: NotificationsService)
+    notifications.controller.ts, notifications.service.ts
+    dto/ (query-notification)
+  gallery/
+    gallery.module.ts (imports: NotificationsModule)
+    gallery.controller.ts, gallery.service.ts
+    dto/ (request-upload-url, confirm-upload)
+  cron/
+    cron.module.ts (imports: ScheduleModule.forRoot(), NotificationsModule)
+    cron.service.ts
+
+packages/shared/src/
+  index.ts                — 모든 타입/상수 re-export
+  constants/index.ts      — REFUND_POLICY, SOFT_LOCK_DURATION_MS, PRE_ACTIVITY_NOTIFICATION_HOURS,
+                            REDIS_LOCK_TTL_MS, REDIS_LOCK_RETRY_INTERVAL_MS, REDIS_LOCK_MAX_RETRIES,
+                            GALLERY_SIGNED_URL_EXPIRES_IN, GALLERY_UPLOAD_URL_EXPIRES_IN,
+                            THUMBNAIL_MAX_WIDTH, THUMBNAIL_QUALITY
+  types/
+    user.ts               — UserRole enum (PARENT, INSTRUCTOR, ADMIN), User, AuthResponse
+    program.ts            — Program interface
+    reservation.ts        — ReservationStatus enum (PENDING, CONFIRMED, CANCELLED, COMPLETED), Reservation
+    gallery.ts            — Gallery interface (imageKey, thumbnailKey, uploadedBy)
+    payment.ts            — PaymentMethod enum, PaymentStatus enum, Payment
+    attendance.ts         — AttendanceStatus enum (ATTENDED, NO_SHOW), Attendance
+    notification.ts       — NotificationType enum (PRE_ACTIVITY, GALLERY_UPLOADED), Notification
+
+################################################################################
+# PART 6: Prisma 모델 요약
+################################################################################
+
+enum: UserRole, ReservationStatus, PaymentMethod, PaymentStatus, AttendanceStatus, NotificationType
+
+User:
+  id, email(unique), name, role, password?, kakaoId?(unique), profileImageUrl?, phoneNumber, fcmToken?
+  relations: programs[], reservations[], checkedAttendances[], notifications[], uploadedPhotos[]
+
+Program:
+  id, instructorId, title, description, location, latitude, longitude, price, maxCapacity, minAge, scheduleAt
+  relations: instructor(User), reservations[], gallery[]
+
+Reservation:
+  id, userId, programId, status(default PENDING), participantCount, totalPrice
+  relations: user(User), program(Program), payment?(1:1), attendance?(1:1)
+
+Payment:
+  id, reservationId(unique), method, portonePaymentId(unique), amount, status(default PENDING), paidAt?, refundedAmount(default 0), refundedAt?
+  relations: reservation(Reservation)
+
+Attendance:
+  id, reservationId(unique), status(default NO_SHOW), qrCode(unique), checkedAt?, checkedBy?
+  relations: reservation(Reservation), checker(User?)
+
+Gallery:
+  id, programId, imageKey, thumbnailKey, uploadedBy
+  relations: program(Program), uploader(User)
+
+Notification:
+  id, userId, type(NotificationType), title, body, isRead(default false), data(Json?)
+  index: [userId, createdAt]
+  relations: user(User)
+
+################################################################################
+# PART 7: 전체 API 엔드포인트 (26개)
+################################################################################
+
+인증 (3개):
+  POST /auth/register              — 로컬 회원가입
+  POST /auth/login                 — 로컬 로그인 (JWT 발급)
+  POST /auth/kakao                 — 카카오 OAuth 로그인
+
+프로그램 (4개):
+  GET  /programs                   — 프로그램 검색/조회 (Public)
+  GET  /programs/:id               — 프로그램 상세 (Public)
+  POST /programs                   — 프로그램 생성 (INSTRUCTOR)
+  PATCH /programs/:id              — 프로그램 수정 (INSTRUCTOR)
+
+예약 (4개):
+  POST /reservations               — 예약 생성 (PARENT, PENDING + Redis 락)
+  GET  /reservations               — 내 예약 목록
+  GET  /reservations/:id           — 예약 상세
+  PATCH /reservations/:id/cancel   — 예약 취소 (PortOne 환불)
+
+결제 (2개):
+  POST /payments/prepare           — 결제 세션 생성 (JWT)
+  POST /payments/webhook           — PortOne 웹훅 수신
+
+출석 (3개):
+  POST /attendance/check           — 수동 출석 체크 (INSTRUCTOR)
+  GET  /attendance/qr/:reservationId — QR 코드 조회 (JWT)
+  POST /attendance/qr/verify       — QR 스캔 출석 확인 (INSTRUCTOR)
+
+알림 (4개):
+  GET  /notifications              — 내 알림 목록 (커서 페이지네이션)
+  GET  /notifications/unread-count — 읽지 않은 알림 수
+  PATCH /notifications/:id/read    — 알림 읽음 처리
+  PATCH /notifications/read-all    — 모든 알림 읽음 처리
+
+사진첩 (4개):
+  POST /gallery/upload-url         — Pre-signed 업로드 URL 요청 (INSTRUCTOR)
+  POST /gallery/confirm            — 업로드 확인 + 썸네일 생성 (INSTRUCTOR)
+  GET  /gallery/program/:programId — 사진첩 조회 (참여자/강사만, Signed URL)
+  DELETE /gallery/:id              — 사진 삭제 (INSTRUCTOR)
+
+스케줄링:
+  CronJob @EVERY_HOUR              — 활동 24시간 전 알림 자동 발송
+
+################################################################################
+# PART 8: 환경변수 (.env.example)
+################################################################################
+
+DATABASE_URL="postgresql://user:password@localhost:5432/sooptalk?schema=public"
+PORT=3000
+JWT_SECRET="your-jwt-secret"
+KAKAO_REST_API_KEY="your-kakao-rest-api-key"
+REDIS_URL="redis://localhost:6379"
+PORTONE_API_SECRET="your-portone-api-secret"
+PORTONE_STORE_ID="your-portone-store-id"
+PORTONE_CHANNEL_KEY="your-portone-channel-key"
+PORTONE_WEBHOOK_SECRET="your-portone-webhook-secret"
+AWS_ACCESS_KEY_ID="your-aws-access-key-id"
+AWS_SECRET_ACCESS_KEY="your-aws-secret-access-key"
+AWS_S3_BUCKET="your-s3-bucket-name"
+AWS_REGION="ap-northeast-2"
+FIREBASE_PROJECT_ID="your-firebase-project-id"
+FIREBASE_CLIENT_EMAIL="your-firebase-client-email"
+FIREBASE_PRIVATE_KEY="your-firebase-private-key"
+
+################################################################################
+# PART 9: TODO — Phase 4 (정산 시스템 + 어드민 대시보드)
+################################################################################
+
+PRD 기반 Phase 4 범위:
+  - 정산 관리: 강사별 수익금 정산 및 수수료 관리
+  - 콘텐츠 검수: 등록된 활동의 적절성 검토 및 승인
+  - 어드민 대시보드 (Next.js apps/admin)
+
+[TODO 1] 정산 데이터 모델 설계
+  - Settlement 모델: instructorId, periodStart, periodEnd, totalAmount, fee, netAmount, status(PENDING/COMPLETED/PAID), paidAt
+  - 수수료 비율 상수 (예: PLATFORM_FEE_RATE)
+  - Prisma 스키마 + shared 타입 추가
+
+[TODO 2] 정산 서비스 (SettlementModule)
+  - 기간별 강사 매출 집계 (PAID 결제 기준, 환불 차감)
+  - 정산서 생성 로직
+  - 정산 상태 관리 (PENDING → COMPLETED → PAID)
+  - 정산 크론잡 (월별 자동 정산 생성 등)
+
+[TODO 3] 콘텐츠 검수 (프로그램 승인 플로우)
+  - Program에 approvalStatus 필드 추가 (PENDING_REVIEW, APPROVED, REJECTED)
+  - ADMIN만 승인/거절 가능
+  - 승인된 프로그램만 부모에게 노출
+  - 강사에게 승인/거절 알림
+
+[TODO 4] 어드민 대시보드 (apps/admin)
+  - 현재 apps/admin은 빈 Next.js 앱
+  - 필요 페이지:
+    * 대시보드 (매출 통계, 예약 현황, 사용자 수)
+    * 프로그램 관리 (검수 대기 목록, 승인/거절)
+    * 정산 관리 (강사별 정산 내역, 정산 실행)
+    * 사용자 관리 (회원 목록, 역할 변경)
+
+[TODO 5] 어드민 API 엔드포인트 (예상)
+  - GET /admin/dashboard/stats        — 통계 조회
+  - GET /admin/programs/pending       — 검수 대기 프로그램
+  - PATCH /admin/programs/:id/approve — 프로그램 승인
+  - PATCH /admin/programs/:id/reject  — 프로그램 거절
+  - GET /admin/settlements            — 정산 목록
+  - POST /admin/settlements/generate  — 정산 생성
+  - PATCH /admin/settlements/:id/pay  — 정산 지급 완료
+  - GET /admin/users                  — 사용자 목록
+
+[TODO 6] 빌드 검증 + 기존 코드 정합성
+  - 새 모듈 app.module.ts 등록
+  - .env.example 업데이트 (정산 관련 설정이 있다면)
+  - pnpm run build 전체 성공 확인
+
+################################################################################
+# PART 10: 기타 개선 사항 (Phase 4 이후 또는 병행)
+################################################################################
+
+- 우천 일괄 취소: 관리자가 특정 프로그램 일괄 취소 시 전체 예약자 전액 환불 + 알림
+- 리뷰 시스템: 활동 완료 후 부모가 리뷰 작성
+- 카테고리 확장: 숲 외 농장/갯벌 등 카테고리 분류
+- CDN 적용: CloudFront 등으로 이미지 서빙 최적화
+- SMS/알림톡: FCM 외 카카오 알림톡 연동
+
+################################################################################
+# 작업 재개 방법
+################################################################################
+
+이 파일을 컨텍스트로 전달하고:
+  "이 파일 읽고 Phase 4 계획 세워줘"
+라고 요청하면 됨.
+
+================================================================================

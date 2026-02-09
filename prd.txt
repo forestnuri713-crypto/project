@@ -1,0 +1,118 @@
+🏗️ [PRD] 숲체험 예약 플랫폼 '숲똑' MVP
+작성일: 2026년 1월 26일
+문서 성격: 초기 제품 정의 및 개발 범위 확정용
+1. 제품의 목적 (Vision)
+부모에게는 **"신뢰할 수 있는 자연 교육의 기회"**를, 강사에게는 **"활동에만 집중할 수 있는 운영 효율"**을 제공하는 숲체험 전문 매칭 플랫폼.
+2. 핵심 타겟 (User Persona)구분주요 페르소나핵심 니즈부모 (App)주말에 아이와 유익한 활동을 원하는 3040 부모쉬운 예약, 안전 확인(사진), 간편 결제강사 (Web)프리랜서 숲 해설가 및 교육 단체수강생 관리, 공지 전달의 자동화, 포트폴리오 관리
+3. 주요 기능 요구사항 (Functional Requirements)
+A. 부모용 모바일 앱 (User App)
+• 탐색 및 검색: 지역별, 연령별, 날짜별 숲활동 필터링.
+• 예약 및 결제: 실시간 잔여석 확인, PG 연동(카카오페이, 토스 등)을 통한 간편 결제.
+• 활동 관리: 내 예약 현황 확인, 취소 및 환불 규정에 따른 자동 환불 처리.
+• 알림 및 공유: 활동 전 준비물 안내 알림톡, 활동 후 강사가 올린 우리 아이 사진첩 확인.
+B. 강사용 관리자 페이지 (Instructor Admin)
+• 활동 등록: 커리큘럼, 장소, 정원, 가격, 준비물 설정.
+• 예약자 관리: 실시간 예약 명단 확인 및 출석 체크.
+• 안내 자동화: 활동 전 일괄 안내 메시지(Push/SMS) 발송.
+• 사진 공유: 활동 종료 후 갤러리 업로드 기능을 통해 부모에게 개별/공통 사진 전달.
+C. 통합 관리 시스템 (Back-office)
+• 정산 관리: 강사별 수익금 정산 및 수수료 관리.
+• 콘텐츠 검수: 등록된 활동의 적절성 검토 및 승인.
+4. 사용자 여정 (User Journey)
+1. 발견: 부모가 앱에서 집 근처 '토요일 오전 숲교실' 검색.
+2. 확정: 커리큘럼 확인 후 결제 완료 (즉시 예약 확정).
+3. 준비: 활동 1일 전, 강사가 등록해둔 안내 사항이 알림톡으로 자동 발송.
+4. 활동: 아이는 숲활동 참여, 강사는 앱/웹으로 출석 확인.
+5. 피드백: 활동 종료 후 강사가 올린 아이들 사진을 보며 부모가 리뷰 작성.
+5. 기술적 고려사항 및 제언 (Developer's Note)"대표님, 이 부분은 꼭 짚고 넘어가야 합니다."
+• 이미지 최적화: 부모님들은 고화질 사진을 원하지만, 서버 비용은 무시 못 합니다. 업로드 시 자동 리사이징과 CDN 활용이 필수입니다.
+• 환불 로직: 단순 변심과 우천 시 취소 등 다양한 케이스에 대응하는 자동화된 환불 로직이 초기 설계에 포함되어야 운영팀의 고생을 덜 수 있습니다.
+• 확장성: 추후 숲뿐만 아니라 농장 체험, 갯벌 체험 등으로 카테고리를 확장할 수 있도록 DB 구조를 유연하게 가져가겠습니다.
+6. 성공 지표 (KPI)
+• 초기 목표: 가입 대비 첫 예약 전환율 20% 이상.
+• 재방문율: 활동 후 사진첩 확인을 위해 앱에 다시 접속하는 비율 (Retention).
+• 운영 효율: 강사 1인당 관리 시간 50% 단축.
+
+
+# [Technical PRD] 숲체험 플랫폼 '숲똑' 시스템 설계서
+
+## 1. 테크 스택 제안 (Recommended Tech Stack)
+
+- **Frontend:** React Native (iOS/Android 통합) or Flutter
+- **Admin/Instructor Web:** React.js or Next.js
+- **Backend:** Node.js (NestJS) or Spring Boot
+- **Database:** PostgreSQL (예약 데이터의 무결성 중요)
+- **Storage:** AWS S3 (활동 사진 저장용)
+- **Infrastructure:** AWS (EC2, RDS, Lambda for Image Resizing)
+
+---
+
+## 2. 핵심 데이터 모델 (ERD 간소화)
+
+### 2.1 User (사용자)
+
+- `id`, `email`, `role` (PARENT, INSTRUCTOR, ADMIN), `phone_number`, `fcm_token` (알림용)
+
+### 2.2 Program (숲 활동)
+
+- `id`, `instructor_id`, `title`, `description`, `location` (Geopoint), `price`, `max_capacity`, `min_age`, `schedule_at`
+
+### 2.3 Reservation (예약)
+
+- `id`, `user_id`, `program_id`, `status` (PENDING, CONFIRMED, CANCELLED, COMPLETED), `participant_count`, `total_price`
+
+### 2.4 Gallery (사진첩)
+
+- `id`, `program_id`, `image_url`, `created_at`
+
+---
+
+## 3. 주요 기능 상세 로직 (Technical Logic)
+
+### 3.1 예약 및 동시성 제어 (Booking Concurrency)
+
+- **Issue:** 인기가 많은 숲체험의 경우, 마지막 1자리에 대해 동시에 여러 명의 결제가 시도될 수 있음.
+- **Solution:** * DB Transaction Isolation Level을 통한 제어.
+    - 결제 진입 시 해당 세션에 대해 5분간 '가예약(Soft-lock)' 상태 부여.
+    - Redis를 활용한 분산 락(Distributed Lock) 고려.
+
+### 3.2 결제 및 환불 시스템
+
+- **PG 연동:** 포트원(PortOne) 등 결제 API 통합.
+- **Webhook 처리:** 결제 완료/취소 시 서버에서 비동기적으로 `Reservation` 상태 업데이트 및 알림 발송.
+- **환불 정책 엔진:** `활동 2일 전 100%`, `1일 전 50%`, `당일 불가` 등 조건부 로직 구현.
+
+### 3.3 이미지 업로드 최적화 (Photo Sharing)
+
+- **Process:** 강사가 고화질 사진 업로드 시 S3에 원본 저장.
+- **Optimization:** Lambda Edge를 활용해 부모 앱 뷰어용 썸네일 자동 생성(Image Resizing). 부모 앱에서는 WebP 포맷으로 서빙하여 데이터 소모 최소화.
+
+### 3.4 알림 시스템 (Messaging)
+
+- **Pre-activity:** 활동 24시간 전, `schedule_at` 기준으로 배치 작업(Cron Job) 돌려 알림톡/Push 발송.
+- **Post-activity:** 강사가 갤러리 업로드 완료 버튼 클릭 시 해당 예약자 전원에게 Push 알림.
+
+### 4. API Endpoints (Core)
+
+| **Method** | **Endpoint** | **Description** | **Auth** |
+| --- | --- | --- | --- |
+| **GET** | `/programs` | 필터 기반 활동 검색 | Public |
+| **POST** | `/reservations` | 예약 신청 및 결제 세션 생성 | User |
+| **PATCH** | `/reservations/{id}/cancel` | 예약 취소 및 환불 로직 실행 | User |
+| **POST** | `/instructor/programs` | 강사의 활동 신규 등록 | Instructor |
+| **POST** | `/instructor/gallery` | 활동 사진 일괄 업로드 (S3 Pre-signed URL 활용) | Instructor |
+
+## 5. 예외 처리 및 가용성 (Edge Cases)
+
+- **우천 시 취소:** 관리자가 일괄 취소 시, 전체 예약자에게 전액 환불 및 자동 안내 발송 스크립트 필요.
+- **노쇼(No-show) 방지:** 활동 1시간 전 최종 출석 체크 기능.
+- **개인정보 보호:** 아이들 사진이 포함되므로, 해당 활동 예약자(부모)만 사진첩 접근이 가능하도록 **Signed URL** 또는 **Session 기반 권한 체크** 필수.
+
+---
+
+## 6. 개발 로드맵 (Milestones)
+
+1. **Phase 1:** Auth, 프로그램 조회 및 단순 예약 기능 (MVP)
+2. **Phase 2:** 결제 모듈 연동 및 강사 관리 페이지 구축
+3. **Phase 3:** 알림 자동화 및 사진첩 기능 고도화
+4. **Phase 4:** 정산 시스템 및 어드민 대시보드

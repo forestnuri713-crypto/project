@@ -1,0 +1,213 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  PARENT
+  INSTRUCTOR
+  ADMIN
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum PaymentMethod {
+  KAKAO_PAY
+  TOSS_PAY
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIAL_REFUND
+}
+
+enum AttendanceStatus {
+  ATTENDED
+  NO_SHOW
+}
+
+enum NotificationType {
+  PRE_ACTIVITY
+  GALLERY_UPLOADED
+  PROGRAM_APPROVED
+  PROGRAM_REJECTED
+  SETTLEMENT_CREATED
+}
+
+enum ApprovalStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum SettlementStatus {
+  PENDING
+  CONFIRMED
+  PAID
+}
+
+model User {
+  id              String   @id @default(uuid())
+  email           String   @unique
+  name            String
+  role            UserRole
+  password        String?
+  kakaoId         String?  @unique @map("kakao_id")
+  profileImageUrl String?  @map("profile_image_url")
+  phoneNumber     String   @map("phone_number")
+  fcmToken        String?  @map("fcm_token")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  programs           Program[]
+  reservations       Reservation[]
+  checkedAttendances Attendance[]  @relation("AttendanceChecker")
+  notifications      Notification[]
+  uploadedPhotos     Gallery[]     @relation("GalleryUploader")
+  settlements        Settlement[]
+
+  @@map("users")
+}
+
+model Program {
+  id              String         @id @default(uuid())
+  instructorId    String         @map("instructor_id")
+  title           String
+  description     String
+  location        String
+  latitude        Float
+  longitude       Float
+  price           Int
+  maxCapacity     Int            @map("max_capacity")
+  minAge          Int            @map("min_age")
+  scheduleAt      DateTime       @map("schedule_at")
+  approvalStatus  ApprovalStatus @default(PENDING_REVIEW)
+  rejectionReason String?        @map("rejection_reason")
+  isB2b           Boolean        @default(false) @map("is_b2b")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  instructor   User          @relation(fields: [instructorId], references: [id])
+  reservations Reservation[]
+  gallery      Gallery[]
+
+  @@index([approvalStatus])
+  @@map("programs")
+}
+
+model Reservation {
+  id               String            @id @default(uuid())
+  userId           String            @map("user_id")
+  programId        String            @map("program_id")
+  status           ReservationStatus @default(PENDING)
+  participantCount Int               @map("participant_count")
+  totalPrice       Int               @map("total_price")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  user       User        @relation(fields: [userId], references: [id])
+  program    Program     @relation(fields: [programId], references: [id])
+  payment    Payment?
+  attendance Attendance?
+
+  @@map("reservations")
+}
+
+model Payment {
+  id               String        @id @default(uuid())
+  reservationId    String        @unique @map("reservation_id")
+  method           PaymentMethod
+  portonePaymentId String        @unique @map("portone_payment_id")
+  amount           Int
+  status           PaymentStatus @default(PENDING)
+  paidAt           DateTime?     @map("paid_at")
+  refundedAmount   Int           @default(0) @map("refunded_amount")
+  refundedAt       DateTime?     @map("refunded_at")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  reservation Reservation @relation(fields: [reservationId], references: [id])
+
+  @@map("payments")
+}
+
+model Attendance {
+  id            String           @id @default(uuid())
+  reservationId String           @unique @map("reservation_id")
+  status        AttendanceStatus @default(NO_SHOW)
+  qrCode        String           @unique @map("qr_code")
+  checkedAt     DateTime?        @map("checked_at")
+  checkedBy     String?          @map("checked_by")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  reservation Reservation @relation(fields: [reservationId], references: [id])
+  checker     User?       @relation("AttendanceChecker", fields: [checkedBy], references: [id])
+
+  @@map("attendances")
+}
+
+model Gallery {
+  id           String   @id @default(uuid())
+  programId    String   @map("program_id")
+  imageKey     String   @map("image_key")
+  thumbnailKey String   @map("thumbnail_key")
+  uploadedBy   String   @map("uploaded_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  program  Program @relation(fields: [programId], references: [id])
+  uploader User    @relation("GalleryUploader", fields: [uploadedBy], references: [id])
+
+  @@map("gallery")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String           @map("user_id")
+  type      NotificationType
+  title     String
+  body      String
+  isRead    Boolean          @default(false) @map("is_read")
+  data      Json?
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model Settlement {
+  id               String           @id @default(uuid())
+  instructorId     String           @map("instructor_id")
+  periodStart      DateTime         @map("period_start")
+  periodEnd        DateTime         @map("period_end")
+  grossAmount      Int              @map("gross_amount")
+  refundAmount     Int              @map("refund_amount")
+  platformFee      Int              @map("platform_fee")
+  notificationCost Int              @map("notification_cost")
+  b2bCommission    Int              @map("b2b_commission")
+  netAmount        Int              @map("net_amount")
+  status           SettlementStatus @default(PENDING)
+  paidAt           DateTime?        @map("paid_at")
+  memo             String?
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  instructor User @relation(fields: [instructorId], references: [id])
+
+  @@unique([instructorId, periodStart, periodEnd])
+  @@map("settlements")
+}
