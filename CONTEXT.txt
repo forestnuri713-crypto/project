@@ -1,8 +1,8 @@
 ================================================================================
 숲똑 (SoopTalk) — 전체 프로젝트 컨텍스트 + 다음 작업 TODO
 ================================================================================
-최종 업데이트: 2026-02-08
-현재 상태: Phase 3 완료, Phase 4 미착수
+최종 업데이트: 2026-02-09
+현재 상태: Phase 4 완료 (백엔드), Phase 5 미착수 (어드민 프론트엔드)
 빌드 상태: pnpm run build 성공 (shared, server, admin, mobile 전체)
 
 ################################################################################
@@ -35,7 +35,8 @@
   Phase 1: Auth + 프로그램 조회 + 단순 예약 (MVP)  ← 완료
   Phase 2: 결제 모듈 + 강사 관리 고도화            ← 완료
   Phase 3: 알림 자동화 + 사진첩 고도화             ← 완료
-  Phase 4: 정산 시스템 + 어드민 대시보드            ← 미착수
+  Phase 4: 정산 시스템 + 어드민 API (백엔드)        ← 완료
+  Phase 5: 어드민 대시보드 (프론트엔드)             ← 미착수
 
 ################################################################################
 # PART 2: Phase 0~1 요약 (초기 세팅 + MVP)
@@ -73,7 +74,7 @@
   POST /attendance/qr/verify — QR 스캔 출석 확인 (INSTRUCTOR)
 
 ################################################################################
-# PART 4: Phase 3 완료 현황 (알림 + 사진첩)
+# PART 4: Phase 3 요약 (알림 + 사진첩)
 ################################################################################
 
 [StorageModule] @Global()
@@ -100,26 +101,76 @@
   - CONFIRMED 예약 사용자에게 PRE_ACTIVITY 알림
   - Redis 키(notification:sent:pre_activity:{programId}, TTL 48h) 중복 방지
 
-[RedisService 확장]
-  - 기존: acquireLock, releaseLock
-  - 추가: set, get, sAdd, sIsMember, expire
+################################################################################
+# PART 5: Phase 4 완료 현황 (정산 시스템 + 어드민 API)
+################################################################################
 
-[programs.service.ts 수정]
-  - findOne: gallery: true → _count: { select: { gallery: true } }
+[Shared 패키지 업데이트]
+  - types/settlement.ts 신규: SettlementStatus enum (PENDING, CONFIRMED, PAID), Settlement interface
+  - types/program.ts 수정: ApprovalStatus enum (PENDING_REVIEW, APPROVED, REJECTED), approvalStatus/rejectionReason/isB2b 필드 추가
+  - types/notification.ts 수정: PROGRAM_APPROVED, PROGRAM_REJECTED, SETTLEMENT_CREATED 추가
+  - constants/index.ts 수정: PLATFORM_FEE_RATE(0.10), NOTIFICATION_COST_PER_MESSAGE(15), DEFAULT_B2B_COMMISSION_RATE(0.05), SETTLEMENT_CRON_EXPRESSION, SETTLEMENT_LOCK_KEY_PREFIX, SETTLEMENT_LOCK_TTL_MS 추가
+
+[Prisma 스키마 변경]
+  - ApprovalStatus, SettlementStatus enum 추가
+  - NotificationType에 PROGRAM_APPROVED, PROGRAM_REJECTED, SETTLEMENT_CREATED 추가
+  - Program 모델: approvalStatus(default PENDING_REVIEW), rejectionReason, isB2b(default false), @@index([approvalStatus]) 추가
+  - Settlement 모델 신규: id, instructorId, periodStart, periodEnd, grossAmount, refundAmount, platformFee, notificationCost, b2bCommission, netAmount, status, paidAt, memo, @@unique([instructorId, periodStart, periodEnd])
+  - User 모델: settlements[] 관계 추가
+  - 마이그레이션: 기존 프로그램 APPROVED로 일괄 업데이트
+
+[SettlementsModule]
+  정산 계산 공식:
+    grossAmount      = SUM(PAID payments in period for instructor)
+    refundAmount     = SUM(refundedAmount in period for instructor)
+    notificationCost = COUNT(notifications in period for instructor's programs) × 15
+    b2bCommission    = SUM(B2B PAID payments) × 0.05
+    platformFee      = (grossAmount - refundAmount) × 0.10
+    netAmount        = grossAmount - refundAmount - platformFee - notificationCost - b2bCommission
+
+  서비스 메서드:
+    - generateSettlements(dto): 기간별 전체 강사 정산 생성 + FCM 알림
+    - findAll(query): 페이지네이션 정산 목록
+    - findOne(id): 정산 상세
+    - confirm(id): PENDING → CONFIRMED
+    - markAsPaid(id): CONFIRMED → PAID
+    - update(id, dto): 메모 수정
+    - findByInstructor(instructorId, query): 강사 본인 정산 조회
+
+[AdminModule]
+  서비스 메서드:
+    - getDashboardStats(): 사용자 수, 예약 수, 총 매출, 검수 대기 프로그램 수
+    - findPrograms(query): approvalStatus/검색 필터 + 페이지네이션
+    - approveProgram(id): PENDING_REVIEW → APPROVED + 강사 FCM 알림
+    - rejectProgram(id, dto): PENDING_REVIEW → REJECTED (사유 필수) + 강사 FCM 알림
+    - findUsers(query): 역할/검색 필터 + 페이지네이션
+    - changeUserRole(id, dto): 사용자 역할 변경
+
+[ProgramsModule 수정]
+  - findAll(): approvalStatus: 'APPROVED' 필터 추가 (승인된 프로그램만 공개)
+  - findMyPrograms(instructorId): 신규 메서드 (모든 승인 상태)
+  - GET /programs/my: 신규 엔드포인트 (GET /programs/:id 앞에 배치)
+  - create-program.dto.ts: isB2b 필드 추가
+
+[CronModule 확장]
+  - @Cron('0 2 * * 3'): 매주 수요일 02:00 자동 정산
+  - Redis 분산 락(SETTLEMENT_LOCK_KEY_PREFIX + TTL 5분)으로 중복 방지
+  - 전주 월~일 기간 계산 → settlementsService.generateSettlements() 호출
 
 ################################################################################
-# PART 5: 현재 전체 코드 구조
+# PART 6: 현재 전체 코드 구조
 ################################################################################
 
 apps/server/src/
   app.module.ts           — ConfigModule, PrismaModule, RedisModule, StorageModule, FcmModule,
                             AuthModule, ProgramsModule, ReservationsModule, PaymentsModule,
-                            AttendanceModule, NotificationsModule, GalleryModule, CronModule
+                            AttendanceModule, NotificationsModule, GalleryModule, CronModule,
+                            SettlementsModule, AdminModule
   main.ts                 — NestJS 부트스트랩 + Swagger 설정
   prisma/
     prisma.module.ts      — @Global() PrismaModule
     prisma.service.ts     — PrismaClient 래퍼
-    schema.prisma         — 7개 모델, 6개 enum (아래 참조)
+    schema.prisma         — 8개 모델, 8개 enum (아래 참조)
   redis/
     redis.module.ts       — @Global()
     redis.service.ts      — acquireLock, releaseLock, set, get, sAdd, sIsMember, expire
@@ -157,36 +208,52 @@ apps/server/src/
     gallery.controller.ts, gallery.service.ts
     dto/ (request-upload-url, confirm-upload)
   cron/
-    cron.module.ts (imports: ScheduleModule.forRoot(), NotificationsModule)
-    cron.service.ts
+    cron.module.ts (imports: ScheduleModule.forRoot(), NotificationsModule, SettlementsModule)
+    cron.service.ts — 활동 알림 크론 + 주간 정산 크론
+  settlements/
+    settlements.module.ts (imports: NotificationsModule, exports: SettlementsService)
+    settlements.controller.ts — GET /settlements/my (INSTRUCTOR)
+    settlements.service.ts — 정산 계산/생성/조회/상태변경
+    dto/ (query-settlement, generate-settlement, update-settlement)
+  admin/
+    admin.module.ts (imports: NotificationsModule, SettlementsModule)
+    admin.controller.ts — 12개 어드민 엔드포인트 (ADMIN)
+    admin.service.ts — 대시보드/프로그램 검수/사용자 관리
+    dto/ (admin-query-programs, reject-program, change-role, admin-query-users)
 
 packages/shared/src/
   index.ts                — 모든 타입/상수 re-export
   constants/index.ts      — REFUND_POLICY, SOFT_LOCK_DURATION_MS, PRE_ACTIVITY_NOTIFICATION_HOURS,
                             REDIS_LOCK_TTL_MS, REDIS_LOCK_RETRY_INTERVAL_MS, REDIS_LOCK_MAX_RETRIES,
                             GALLERY_SIGNED_URL_EXPIRES_IN, GALLERY_UPLOAD_URL_EXPIRES_IN,
-                            THUMBNAIL_MAX_WIDTH, THUMBNAIL_QUALITY
+                            THUMBNAIL_MAX_WIDTH, THUMBNAIL_QUALITY,
+                            PLATFORM_FEE_RATE, NOTIFICATION_COST_PER_MESSAGE,
+                            DEFAULT_B2B_COMMISSION_RATE, SETTLEMENT_CRON_EXPRESSION,
+                            SETTLEMENT_LOCK_KEY_PREFIX, SETTLEMENT_LOCK_TTL_MS
   types/
     user.ts               — UserRole enum (PARENT, INSTRUCTOR, ADMIN), User, AuthResponse
-    program.ts            — Program interface
+    program.ts            — ApprovalStatus enum (PENDING_REVIEW, APPROVED, REJECTED), Program interface
     reservation.ts        — ReservationStatus enum (PENDING, CONFIRMED, CANCELLED, COMPLETED), Reservation
     gallery.ts            — Gallery interface (imageKey, thumbnailKey, uploadedBy)
     payment.ts            — PaymentMethod enum, PaymentStatus enum, Payment
     attendance.ts         — AttendanceStatus enum (ATTENDED, NO_SHOW), Attendance
-    notification.ts       — NotificationType enum (PRE_ACTIVITY, GALLERY_UPLOADED), Notification
+    notification.ts       — NotificationType enum (PRE_ACTIVITY, GALLERY_UPLOADED, PROGRAM_APPROVED, PROGRAM_REJECTED, SETTLEMENT_CREATED), Notification
+    settlement.ts         — SettlementStatus enum (PENDING, CONFIRMED, PAID), Settlement interface
 
 ################################################################################
-# PART 6: Prisma 모델 요약
+# PART 7: Prisma 모델 요약
 ################################################################################
 
-enum: UserRole, ReservationStatus, PaymentMethod, PaymentStatus, AttendanceStatus, NotificationType
+enum (8개): UserRole, ReservationStatus, PaymentMethod, PaymentStatus, AttendanceStatus, NotificationType, ApprovalStatus, SettlementStatus
 
 User:
   id, email(unique), name, role, password?, kakaoId?(unique), profileImageUrl?, phoneNumber, fcmToken?
-  relations: programs[], reservations[], checkedAttendances[], notifications[], uploadedPhotos[]
+  relations: programs[], reservations[], checkedAttendances[], notifications[], uploadedPhotos[], settlements[]
 
 Program:
-  id, instructorId, title, description, location, latitude, longitude, price, maxCapacity, minAge, scheduleAt
+  id, instructorId, title, description, location, latitude, longitude, price, maxCapacity, minAge, scheduleAt,
+  approvalStatus(default PENDING_REVIEW), rejectionReason?, isB2b(default false)
+  index: [approvalStatus]
   relations: instructor(User), reservations[], gallery[]
 
 Reservation:
@@ -210,8 +277,13 @@ Notification:
   index: [userId, createdAt]
   relations: user(User)
 
+Settlement:
+  id, instructorId, periodStart, periodEnd, grossAmount, refundAmount, platformFee, notificationCost, b2bCommission, netAmount, status(default PENDING), paidAt?, memo?
+  unique: [instructorId, periodStart, periodEnd]
+  relations: instructor(User)
+
 ################################################################################
-# PART 7: 전체 API 엔드포인트 (26개)
+# PART 8: 전체 API 엔드포인트 (41개)
 ################################################################################
 
 인증 (3개):
@@ -219,8 +291,9 @@ Notification:
   POST /auth/login                 — 로컬 로그인 (JWT 발급)
   POST /auth/kakao                 — 카카오 OAuth 로그인
 
-프로그램 (4개):
-  GET  /programs                   — 프로그램 검색/조회 (Public)
+프로그램 (5개):
+  GET  /programs                   — 프로그램 검색/조회 (Public, 승인된 것만)
+  GET  /programs/my                — 강사 본인 프로그램 조회 (INSTRUCTOR, 모든 상태)
   GET  /programs/:id               — 프로그램 상세 (Public)
   POST /programs                   — 프로그램 생성 (INSTRUCTOR)
   PATCH /programs/:id              — 프로그램 수정 (INSTRUCTOR)
@@ -252,11 +325,29 @@ Notification:
   GET  /gallery/program/:programId — 사진첩 조회 (참여자/강사만, Signed URL)
   DELETE /gallery/:id              — 사진 삭제 (INSTRUCTOR)
 
-스케줄링:
+정산 — 강사 (1개):
+  GET  /settlements/my             — 강사 본인 정산 조회 (INSTRUCTOR)
+
+어드민 (12개, 모두 JWT + ADMIN):
+  GET    /admin/dashboard/stats    — 대시보드 통계 (사용자/예약/매출/대기)
+  GET    /admin/programs           — 프로그램 목록 (approvalStatus 필터)
+  PATCH  /admin/programs/:id/approve — 프로그램 승인 + 강사 FCM 알림
+  PATCH  /admin/programs/:id/reject  — 프로그램 거절 (사유 필수) + 강사 FCM 알림
+  GET    /admin/settlements        — 정산 목록
+  GET    /admin/settlements/:id    — 정산 상세
+  POST   /admin/settlements/generate — 수동 정산 생성
+  PATCH  /admin/settlements/:id/confirm — 정산 확인 (PENDING → CONFIRMED)
+  PATCH  /admin/settlements/:id/pay    — 정산 지급 완료 (CONFIRMED → PAID)
+  PATCH  /admin/settlements/:id    — 정산 메모 수정
+  GET    /admin/users              — 사용자 목록 (역할/검색 필터, 페이지네이션)
+  PATCH  /admin/users/:id/role     — 사용자 역할 변경
+
+스케줄링 (2개):
   CronJob @EVERY_HOUR              — 활동 24시간 전 알림 자동 발송
+  CronJob @0 2 * * 3               — 매주 수요일 02:00 주간 정산 자동 생성 (Redis 분산 락)
 
 ################################################################################
-# PART 8: 환경변수 (.env.example)
+# PART 9: 환경변수 (.env.example)
 ################################################################################
 
 DATABASE_URL="postgresql://user:password@localhost:5432/sooptalk?schema=public"
@@ -277,56 +368,38 @@ FIREBASE_CLIENT_EMAIL="your-firebase-client-email"
 FIREBASE_PRIVATE_KEY="your-firebase-private-key"
 
 ################################################################################
-# PART 9: TODO — Phase 4 (정산 시스템 + 어드민 대시보드)
+# PART 10: TODO — Phase 5 (어드민 대시보드 프론트엔드)
 ################################################################################
 
-PRD 기반 Phase 4 범위:
-  - 정산 관리: 강사별 수익금 정산 및 수수료 관리
-  - 콘텐츠 검수: 등록된 활동의 적절성 검토 및 승인
-  - 어드민 대시보드 (Next.js apps/admin)
+Phase 4에서 백엔드 API 12개가 완성됨. Phase 5에서 apps/admin Next.js 앱에 UI 구현.
 
-[TODO 1] 정산 데이터 모델 설계
-  - Settlement 모델: instructorId, periodStart, periodEnd, totalAmount, fee, netAmount, status(PENDING/COMPLETED/PAID), paidAt
-  - 수수료 비율 상수 (예: PLATFORM_FEE_RATE)
-  - Prisma 스키마 + shared 타입 추가
+[TODO 1] 어드민 인증
+  - 로그인 페이지 (ADMIN 역할 체크)
+  - JWT 토큰 관리 (쿠키 or localStorage)
+  - 인증 미들웨어 / Protected Route
 
-[TODO 2] 정산 서비스 (SettlementModule)
-  - 기간별 강사 매출 집계 (PAID 결제 기준, 환불 차감)
-  - 정산서 생성 로직
-  - 정산 상태 관리 (PENDING → COMPLETED → PAID)
-  - 정산 크론잡 (월별 자동 정산 생성 등)
+[TODO 2] 대시보드 페이지
+  - GET /admin/dashboard/stats 연동
+  - 사용자 수, 예약 수, 총 매출, 검수 대기 프로그램 수 카드 표시
+  - 차트 (매출 추이, 예약 현황 등)
 
-[TODO 3] 콘텐츠 검수 (프로그램 승인 플로우)
-  - Program에 approvalStatus 필드 추가 (PENDING_REVIEW, APPROVED, REJECTED)
-  - ADMIN만 승인/거절 가능
-  - 승인된 프로그램만 부모에게 노출
-  - 강사에게 승인/거절 알림
+[TODO 3] 프로그램 관리 페이지
+  - GET /admin/programs 연동 (approvalStatus 탭 필터)
+  - 승인/거절 버튼 (PATCH approve/reject)
+  - 프로그램 상세 모달/페이지
 
-[TODO 4] 어드민 대시보드 (apps/admin)
-  - 현재 apps/admin은 빈 Next.js 앱
-  - 필요 페이지:
-    * 대시보드 (매출 통계, 예약 현황, 사용자 수)
-    * 프로그램 관리 (검수 대기 목록, 승인/거절)
-    * 정산 관리 (강사별 정산 내역, 정산 실행)
-    * 사용자 관리 (회원 목록, 역할 변경)
+[TODO 4] 정산 관리 페이지
+  - GET /admin/settlements 연동 (상태 필터, 페이지네이션)
+  - 정산 상세 (GET /admin/settlements/:id)
+  - 수동 정산 생성 (POST /admin/settlements/generate)
+  - 확인/지급 완료 버튼
 
-[TODO 5] 어드민 API 엔드포인트 (예상)
-  - GET /admin/dashboard/stats        — 통계 조회
-  - GET /admin/programs/pending       — 검수 대기 프로그램
-  - PATCH /admin/programs/:id/approve — 프로그램 승인
-  - PATCH /admin/programs/:id/reject  — 프로그램 거절
-  - GET /admin/settlements            — 정산 목록
-  - POST /admin/settlements/generate  — 정산 생성
-  - PATCH /admin/settlements/:id/pay  — 정산 지급 완료
-  - GET /admin/users                  — 사용자 목록
-
-[TODO 6] 빌드 검증 + 기존 코드 정합성
-  - 새 모듈 app.module.ts 등록
-  - .env.example 업데이트 (정산 관련 설정이 있다면)
-  - pnpm run build 전체 성공 확인
+[TODO 5] 사용자 관리 페이지
+  - GET /admin/users 연동 (역할 필터, 검색)
+  - 역할 변경 (PATCH /admin/users/:id/role)
 
 ################################################################################
-# PART 10: 기타 개선 사항 (Phase 4 이후 또는 병행)
+# PART 11: 기타 개선 사항 (향후)
 ################################################################################
 
 - 우천 일괄 취소: 관리자가 특정 프로그램 일괄 취소 시 전체 예약자 전액 환불 + 알림
@@ -340,7 +413,7 @@ PRD 기반 Phase 4 범위:
 ################################################################################
 
 이 파일을 컨텍스트로 전달하고:
-  "이 파일 읽고 Phase 4 계획 세워줘"
+  "이 파일 읽고 Phase 5 계획 세워줘"
 라고 요청하면 됨.
 
 ================================================================================

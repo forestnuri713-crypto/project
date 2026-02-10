@@ -1,89 +1,116 @@
-# Phase 3: 알림 자동화 + 사진첩 고도화 — 완료
+# Phase 4: 정산 시스템 + 어드민 API (백엔드) — 완료
 
 ## 작업 요약
 
 ### Step 1: Shared 패키지 업데이트
-- `packages/shared/src/types/notification.ts` 신규 — `NotificationType` enum (`PRE_ACTIVITY`, `GALLERY_UPLOADED`), `Notification` interface
-- `packages/shared/src/types/gallery.ts` 수정 — `imageUrl` → `imageKey`, `thumbnailKey`/`uploadedBy` 추가
-- `packages/shared/src/constants/index.ts` 수정 — `GALLERY_SIGNED_URL_EXPIRES_IN`, `GALLERY_UPLOAD_URL_EXPIRES_IN`, `THUMBNAIL_MAX_WIDTH`, `THUMBNAIL_QUALITY` 추가
-- `packages/shared/src/index.ts` 수정 — 새 타입/상수 export
+- `packages/shared/src/types/settlement.ts` 신규 — `SettlementStatus` enum (PENDING, CONFIRMED, PAID), `Settlement` interface
+- `packages/shared/src/types/program.ts` 수정 — `ApprovalStatus` enum (PENDING_REVIEW, APPROVED, REJECTED), `approvalStatus`/`rejectionReason`/`isB2b` 필드 추가
+- `packages/shared/src/types/notification.ts` 수정 — `PROGRAM_APPROVED`, `PROGRAM_REJECTED`, `SETTLEMENT_CREATED` 추가
+- `packages/shared/src/constants/index.ts` 수정 — `PLATFORM_FEE_RATE`, `NOTIFICATION_COST_PER_MESSAGE`, `DEFAULT_B2B_COMMISSION_RATE`, `SETTLEMENT_CRON_EXPRESSION`, `SETTLEMENT_LOCK_KEY_PREFIX`, `SETTLEMENT_LOCK_TTL_MS` 추가
+- `packages/shared/src/index.ts` 수정 — 새 타입/상수 re-export
 
-### Step 2: Prisma 스키마 + 의존성
-- `schema.prisma` — `NotificationType` enum, `Notification` 모델 추가, `Gallery` 모델 변경 (`imageKey`, `thumbnailKey`, `uploadedBy`, `uploader` 관계), `User`에 `notifications`/`uploadedPhotos` 관계 추가
-- 의존성 추가: `@nestjs/schedule`, `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner`, `firebase-admin`, `sharp`, `@types/multer`
+### Step 2: Prisma 스키마 변경
+- `ApprovalStatus`, `SettlementStatus` enum 추가
+- `NotificationType`에 3개 값 추가
+- `Program` 모델: `approvalStatus`(default PENDING_REVIEW), `rejectionReason`, `isB2b`(default false), `@@index([approvalStatus])`
+- `Settlement` 모델 신규: `@@unique([instructorId, periodStart, periodEnd])`
+- `User` 모델: `settlements[]` 관계 추가
+- 마이그레이션: 기존 프로그램 `APPROVED`로 일괄 업데이트
 
-### Step 3: RedisService 확장
-- `redis.service.ts` — `set`, `get`, `sAdd`, `sIsMember`, `expire` 메서드 추가 (크론잡 중복 방지용)
+### Step 3: SettlementsModule
+- `settlements.service.ts` — 정산 계산/생성/조회/상태변경 (generateSettlements, findAll, findOne, confirm, markAsPaid, update, findByInstructor)
+- `settlements.controller.ts` — `GET /settlements/my` (INSTRUCTOR)
+- `dto/` — query-settlement, generate-settlement, update-settlement
+- `settlements.module.ts` — imports NotificationsModule, exports SettlementsService
 
-### Step 4: StorageModule (S3)
-- `storage.service.ts` — `generateUploadUrl`, `generateDownloadUrl`, `downloadObject`, `uploadObject`, `deleteObject`
-- `storage.module.ts` — `@Global()` 모듈
+### Step 4: AdminModule
+- `admin.service.ts` — getDashboardStats, findPrograms, approveProgram(+FCM), rejectProgram(+FCM), findUsers, changeUserRole
+- `admin.controller.ts` — 12개 어드민 엔드포인트 (모두 JWT + ADMIN)
+- `dto/` — admin-query-programs, reject-program, change-role, admin-query-users
+- `admin.module.ts` — imports NotificationsModule, SettlementsModule
 
-### Step 5: FcmModule (Firebase)
-- `fcm.service.ts` — `onModuleInit`(firebase-admin 초기화), `sendToUser`, `sendToMultipleUsers`
-- `fcm.module.ts` — `@Global()` 모듈
+### Step 5: ProgramsModule 수정
+- `findAll()` — `approvalStatus: 'APPROVED'` 필터 추가 (승인된 프로그램만 공개)
+- `findMyPrograms(instructorId)` — 신규 메서드 (모든 승인 상태)
+- `GET /programs/my` — 신규 엔드포인트 (`GET /programs/:id` 앞에 배치)
+- `create-program.dto.ts` — `isB2b` 필드 추가
 
-### Step 6: NotificationsModule
-- `notifications.service.ts` — `createAndSend`, `findAllForUser` (커서 페이지네이션), `markAsRead`, `markAllAsRead`, `getUnreadCount`
-- `notifications.controller.ts` — 4개 엔드포인트
-- `dto/query-notification.dto.ts` — cursor/limit
+### Step 6: CronModule 확장
+- `cron.module.ts` — SettlementsModule import 추가
+- `@Cron('0 2 * * 3')` — 매주 수요일 02:00 자동 정산
+- Redis 분산 락으로 중복 실행 방지
+- 전주 월~일 기간 계산 → `settlementsService.generateSettlements()` 호출
 
-### Step 7: GalleryModule
-- `gallery.service.ts` — `requestUploadUrls`, `confirmUpload` (sharp 썸네일 생성 + FCM 알림), `findByProgram` (접근 권한 검증 + Signed URL), `delete`
-- `gallery.controller.ts` — 4개 엔드포인트
-- `dto/request-upload-url.dto.ts`, `dto/confirm-upload.dto.ts`
+### Step 7: 통합
+- `app.module.ts` — `SettlementsModule`, `AdminModule` import 추가
+- `pnpm run build` — 전체 빌드 성공 (shared, server, admin, mobile)
 
-### Step 8: CronModule
-- `cron.service.ts` — `@Cron(EVERY_HOUR)` 매시간 실행, 24시간 전 활동 알림, Redis TTL 48h 중복 방지
-- `cron.module.ts` — `ScheduleModule.forRoot()` 포함
+## 정산 계산 공식
 
-### Step 9: 통합
-- `app.module.ts` — `StorageModule`, `FcmModule`, `NotificationsModule`, `GalleryModule`, `CronModule` import
-- `programs.service.ts` — `findOne`에서 `gallery: true` → `_count: { select: { gallery: true } }` 변경
-- `.env.example` — AWS/Firebase 환경변수 추가
+```
+grossAmount      = SUM(PAID payments in period for instructor)
+refundAmount     = SUM(refundedAmount in period for instructor)
+notificationCost = COUNT(notifications in period) × 15
+b2bCommission    = SUM(B2B PAID payments) × 0.05
+platformFee      = (grossAmount - refundAmount) × 0.10
+netAmount        = grossAmount - refundAmount - platformFee - notificationCost - b2bCommission
+```
 
-## 신규 API 엔드포인트 (8개)
+## 신규 API 엔드포인트 (15개)
 
 | Method | Endpoint | Auth | Role | 설명 |
 |--------|----------|------|------|------|
-| POST | /gallery/upload-url | JWT | INSTRUCTOR | Pre-signed 업로드 URL 요청 |
-| POST | /gallery/confirm | JWT | INSTRUCTOR | 업로드 확인 + 썸네일 생성 |
-| GET | /gallery/program/:programId | JWT | 참여자/강사 | 사진첩 조회 (Signed URL) |
-| DELETE | /gallery/:id | JWT | INSTRUCTOR | 사진 삭제 |
-| GET | /notifications | JWT | * | 알림 목록 (커서 페이지네이션) |
-| GET | /notifications/unread-count | JWT | * | 미읽음 알림 수 |
-| PATCH | /notifications/:id/read | JWT | * | 알림 읽음 처리 |
-| PATCH | /notifications/read-all | JWT | * | 전체 읽음 처리 |
+| GET | /programs/my | JWT | INSTRUCTOR | 강사 본인 프로그램 조회 (모든 상태) |
+| GET | /settlements/my | JWT | INSTRUCTOR | 강사 본인 정산 조회 |
+| GET | /admin/dashboard/stats | JWT | ADMIN | 대시보드 통계 |
+| GET | /admin/programs | JWT | ADMIN | 프로그램 목록 (approvalStatus 필터) |
+| PATCH | /admin/programs/:id/approve | JWT | ADMIN | 프로그램 승인 + FCM |
+| PATCH | /admin/programs/:id/reject | JWT | ADMIN | 프로그램 거절 + FCM |
+| GET | /admin/settlements | JWT | ADMIN | 정산 목록 |
+| GET | /admin/settlements/:id | JWT | ADMIN | 정산 상세 |
+| POST | /admin/settlements/generate | JWT | ADMIN | 수동 정산 생성 |
+| PATCH | /admin/settlements/:id/confirm | JWT | ADMIN | 정산 확인 |
+| PATCH | /admin/settlements/:id/pay | JWT | ADMIN | 정산 지급 완료 |
+| PATCH | /admin/settlements/:id | JWT | ADMIN | 정산 메모 수정 |
+| GET | /admin/users | JWT | ADMIN | 사용자 목록 |
+| PATCH | /admin/users/:id/role | JWT | ADMIN | 사용자 역할 변경 |
 
 ## 신규/수정 파일 목록
 
+### 신규 (14개)
+
 | 파일 | 작업 |
 |------|------|
-| `packages/shared/src/types/notification.ts` | 신규 |
-| `packages/shared/src/types/gallery.ts` | 수정 |
-| `packages/shared/src/constants/index.ts` | 수정 |
-| `packages/shared/src/index.ts` | 수정 |
-| `apps/server/package.json` | 의존성 추가 |
-| `apps/server/src/prisma/schema.prisma` | 모델/enum 추가+수정 |
-| `apps/server/src/redis/redis.service.ts` | 메서드 추가 |
-| `apps/server/src/storage/storage.module.ts` | 신규 |
-| `apps/server/src/storage/storage.service.ts` | 신규 |
-| `apps/server/src/fcm/fcm.module.ts` | 신규 |
-| `apps/server/src/fcm/fcm.service.ts` | 신규 |
-| `apps/server/src/notifications/notifications.module.ts` | 신규 |
-| `apps/server/src/notifications/notifications.controller.ts` | 신규 |
-| `apps/server/src/notifications/notifications.service.ts` | 신규 |
-| `apps/server/src/notifications/dto/query-notification.dto.ts` | 신규 |
-| `apps/server/src/gallery/gallery.module.ts` | 신규 |
-| `apps/server/src/gallery/gallery.controller.ts` | 신규 |
-| `apps/server/src/gallery/gallery.service.ts` | 신규 |
-| `apps/server/src/gallery/dto/request-upload-url.dto.ts` | 신규 |
-| `apps/server/src/gallery/dto/confirm-upload.dto.ts` | 신규 |
-| `apps/server/src/cron/cron.module.ts` | 신규 |
-| `apps/server/src/cron/cron.service.ts` | 신규 |
-| `apps/server/src/programs/programs.service.ts` | 수정 |
-| `apps/server/src/app.module.ts` | 수정 |
-| `apps/server/.env.example` | 수정 |
+| `packages/shared/src/types/settlement.ts` | Settlement 타입 |
+| `apps/server/src/settlements/settlements.module.ts` | 모듈 |
+| `apps/server/src/settlements/settlements.service.ts` | 정산 로직 |
+| `apps/server/src/settlements/settlements.controller.ts` | 강사 엔드포인트 |
+| `apps/server/src/settlements/dto/query-settlement.dto.ts` | DTO |
+| `apps/server/src/settlements/dto/generate-settlement.dto.ts` | DTO |
+| `apps/server/src/settlements/dto/update-settlement.dto.ts` | DTO |
+| `apps/server/src/admin/admin.module.ts` | 모듈 |
+| `apps/server/src/admin/admin.service.ts` | 어드민 로직 |
+| `apps/server/src/admin/admin.controller.ts` | 어드민 엔드포인트 |
+| `apps/server/src/admin/dto/admin-query-programs.dto.ts` | DTO |
+| `apps/server/src/admin/dto/reject-program.dto.ts` | DTO |
+| `apps/server/src/admin/dto/change-role.dto.ts` | DTO |
+| `apps/server/src/admin/dto/admin-query-users.dto.ts` | DTO |
+
+### 수정 (11개)
+
+| 파일 | 변경 |
+|------|------|
+| `packages/shared/src/types/program.ts` | ApprovalStatus enum, 필드 추가 |
+| `packages/shared/src/types/notification.ts` | NotificationType 3개 추가 |
+| `packages/shared/src/constants/index.ts` | 정산 관련 상수 6개 추가 |
+| `packages/shared/src/index.ts` | re-export 추가 |
+| `apps/server/src/prisma/schema.prisma` | 2 enum, Settlement 모델, Program 필드 |
+| `apps/server/src/programs/programs.service.ts` | APPROVED 필터, findMyPrograms() |
+| `apps/server/src/programs/programs.controller.ts` | GET /programs/my |
+| `apps/server/src/programs/dto/create-program.dto.ts` | isB2b 필드 |
+| `apps/server/src/cron/cron.service.ts` | 주간 정산 크론잡 |
+| `apps/server/src/cron/cron.module.ts` | SettlementsModule import |
+| `apps/server/src/app.module.ts` | SettlementsModule, AdminModule import |
 
 ## 빌드 상태
 - `pnpm run build` — 전체 빌드 성공 (shared, server, admin, mobile)

@@ -1,8 +1,9 @@
 ================================================================================
-숲똑 (SoopTalk) — 전체 프로젝트 컨텍스트 + Phase 2 작업 현황
+숲똑 (SoopTalk) — 전체 프로젝트 컨텍스트 + Phase 별 작업 현황
 ================================================================================
-최종 업데이트: 2026-02-08
-Phase 2 상태: 전체 완료 (Step 7/7), pnpm run build 성공
+최종 업데이트: 2026-02-09
+현재 상태: Phase 4 완료 (백엔드), Phase 5 미착수 (어드민 프론트엔드)
+빌드 상태: pnpm run build 성공 (shared, server, admin, mobile 전체)
 
 ################################################################################
 # PART 1: PRD 요약
@@ -23,23 +24,27 @@ Phase 2 상태: 전체 완료 (Step 7/7), pnpm run build 성공
   - Storage: AWS S3
   - Infra: AWS (EC2, RDS, Lambda)
 
-핵심 데이터 모델 (Phase 2 완료 기준):
-  - User: id, email, role, phone_number, fcm_token + checkedAttendances 관계
-  - Program: id, instructor_id, title, description, location(geo), price, max_capacity, min_age, schedule_at
+핵심 데이터 모델 (Phase 4 완료 기준):
+  - User: id, email, role, phone_number, fcm_token + programs/reservations/settlements 관계
+  - Program: id, instructor_id, title, description, location(geo), price, max_capacity, min_age, schedule_at, approval_status, rejection_reason, is_b2b
   - Reservation: id, user_id, program_id, status, participant_count, total_price + payment/attendance 관계
-  - Gallery: id, program_id, image_url
+  - Gallery: id, program_id, image_key, thumbnail_key, uploaded_by
   - Payment: id, reservation_id(1:1), method, portone_payment_id, amount, status, paid_at, refunded_amount, refunded_at
   - Attendance: id, reservation_id(1:1), status, qr_code, checked_at, checked_by
+  - Notification: id, user_id, type, title, body, is_read, data
+  - Settlement: id, instructor_id, period_start, period_end, gross_amount, refund_amount, platform_fee, notification_cost, b2b_commission, net_amount, status, paid_at, memo
 
 개발 로드맵:
   Phase 0: 프로젝트 초기 세팅 (모노레포) ← 완료
   Phase 1: Auth + 프로그램 조회 + 단순 예약 (MVP) ← 완료
   Phase 2: 결제 모듈 + 강사 관리 고도화 ← 완료
-  Phase 3: 알림 자동화 + 사진첩 고도화
-  Phase 4: 정산 시스템 + 어드민 대시보드
+  Phase 3: 알림 자동화 + 사진첩 고도화 ← 완료
+  Phase 4: 정산 시스템 + 어드민 API (백엔드) ← 완료
+  Phase 5: 어드민 대시보드 (프론트엔드) ← 미착수
 
 환불 정책: 2일 전 100%, 1일 전 50%, 당일 환불 불가
 동시성: Redis 분산 락 (SET NX PX + Lua release)
+정산 수수료: 플랫폼 10%, 알림톡 건당 15원, B2B 별도 5%
 
 ################################################################################
 # PART 2: Phase 0 완료 현황 — 프로젝트 초기 세팅
@@ -183,17 +188,152 @@ Phase 2 빌드 중 수정한 사항:
   - @ApiBearerAuth() 데코레이터 추가 (Swagger 문서 정합성)
 
 ################################################################################
-# PART 5: Phase 2 완료 후 전체 코드 구조
+# PART 5: Phase 3 완료 현황 — 알림 자동화 + 사진첩 고도화
+################################################################################
+
+Phase 3 Step별 완료 내역:
+
+  Step 1: Shared 패키지 업데이트                                    [완료]
+    - types/notification.ts 신규: NotificationType enum (PRE_ACTIVITY, GALLERY_UPLOADED), Notification interface
+    - types/gallery.ts 수정: imageUrl → imageKey, thumbnailKey/uploadedBy 추가
+    - constants/index.ts 수정: GALLERY_SIGNED_URL_EXPIRES_IN, GALLERY_UPLOAD_URL_EXPIRES_IN, THUMBNAIL_MAX_WIDTH, THUMBNAIL_QUALITY 추가
+
+  Step 2: Prisma 스키마 + 의존성                                    [완료]
+    - NotificationType enum, Notification 모델 추가
+    - Gallery 모델 변경 (imageKey, thumbnailKey, uploadedBy, uploader 관계)
+    - User에 notifications/uploadedPhotos 관계 추가
+    - 의존성: @nestjs/schedule, @aws-sdk/client-s3, @aws-sdk/s3-request-presigner, firebase-admin, sharp
+
+  Step 3: RedisService 확장                                         [완료]
+    - set, get, sAdd, sIsMember, expire 메서드 추가
+
+  Step 4: StorageModule (S3) @Global()                              [완료]
+    - generateUploadUrl, generateDownloadUrl, downloadObject, uploadObject, deleteObject
+
+  Step 5: FcmModule (Firebase) @Global()                            [완료]
+    - onModuleInit(firebase-admin 초기화), sendToUser, sendToMultipleUsers
+
+  Step 6: NotificationsModule                                       [완료]
+    - createAndSend, findAllForUser(커서 페이지네이션), markAsRead, markAllAsRead, getUnreadCount
+    - 4개 엔드포인트
+
+  Step 7: GalleryModule                                             [완료]
+    - requestUploadUrls, confirmUpload(sharp 썸네일 + FCM), findByProgram(접근 권한 + Signed URL), delete
+    - 4개 엔드포인트
+
+  Step 8: CronModule                                                [완료]
+    - @Cron(EVERY_HOUR): 24시간 전 활동 알림, Redis TTL 48h 중복 방지
+
+  Step 9: 통합 + 빌드 검증                                         [완료]
+    - app.module.ts: StorageModule, FcmModule, NotificationsModule, GalleryModule, CronModule import
+    - .env.example: AWS/Firebase 환경변수 추가
+    - pnpm run build 전체 빌드 성공
+
+################################################################################
+# PART 6: Phase 4 완료 현황 — 정산 시스템 + 어드민 API (백엔드)
+################################################################################
+
+Phase 4 결정 사항:
+  정산 주기: 매주 수요일 02:00 (전주 월~일 자동 정산)
+  수수료: 플랫폼 10%, 알림톡 건당 15원, B2B 별도 5%
+  프로그램 검수: ADMIN 승인/거절, 승인된 프로그램만 부모에게 노출
+  프론트엔드: Phase 5로 분리 (이번 Phase는 백엔드 API만)
+
+정산 계산 공식:
+  grossAmount      = SUM(PAID payments in period for instructor)
+  refundAmount     = SUM(refundedAmount in period for instructor)
+  notificationCost = COUNT(notifications in period for instructor's programs) × 15
+  b2bCommission    = SUM(B2B PAID payments) × 0.05
+  platformFee      = (grossAmount - refundAmount) × 0.10
+  netAmount        = grossAmount - refundAmount - platformFee - notificationCost - b2bCommission
+
+Phase 4 Step별 완료 내역:
+
+  Step 1: Shared 패키지 업데이트                                    [완료]
+    - types/settlement.ts 신규: SettlementStatus enum (PENDING, CONFIRMED, PAID), Settlement interface
+    - types/program.ts 수정: ApprovalStatus enum (PENDING_REVIEW, APPROVED, REJECTED), approvalStatus/rejectionReason/isB2b 필드 추가
+    - types/notification.ts 수정: PROGRAM_APPROVED, PROGRAM_REJECTED, SETTLEMENT_CREATED 추가
+    - constants/index.ts 수정: PLATFORM_FEE_RATE, NOTIFICATION_COST_PER_MESSAGE, DEFAULT_B2B_COMMISSION_RATE, SETTLEMENT_CRON_EXPRESSION, SETTLEMENT_LOCK_KEY_PREFIX, SETTLEMENT_LOCK_TTL_MS 추가
+
+  Step 2: Prisma 스키마 변경                                        [완료]
+    - ApprovalStatus, SettlementStatus enum 추가
+    - NotificationType에 PROGRAM_APPROVED, PROGRAM_REJECTED, SETTLEMENT_CREATED 추가
+    - Program 모델: approvalStatus(default PENDING_REVIEW), rejectionReason, isB2b(default false), @@index([approvalStatus])
+    - Settlement 모델 신규: @@unique([instructorId, periodStart, periodEnd])
+    - User 모델: settlements[] 관계 추가
+    - 마이그레이션: 기존 프로그램 APPROVED로 일괄 업데이트
+
+  Step 3: SettlementsModule                                         [완료]
+    - settlements.service.ts: generateSettlements, findAll, findOne, confirm, markAsPaid, update, findByInstructor
+    - settlements.controller.ts: GET /settlements/my (INSTRUCTOR)
+    - dto/: query-settlement, generate-settlement, update-settlement
+    - settlements.module.ts: imports NotificationsModule, exports SettlementsService
+
+  Step 4: AdminModule                                               [완료]
+    - admin.service.ts: getDashboardStats, findPrograms, approveProgram(+FCM), rejectProgram(+FCM), findUsers, changeUserRole
+    - admin.controller.ts: 12개 어드민 엔드포인트 (모두 JWT + ADMIN)
+    - dto/: admin-query-programs, reject-program, change-role, admin-query-users
+    - admin.module.ts: imports NotificationsModule, SettlementsModule
+
+  Step 5: ProgramsModule 수정                                       [완료]
+    - findAll(): approvalStatus 'APPROVED' 필터 추가 (승인된 프로그램만 공개)
+    - findMyPrograms(instructorId): 신규 메서드 (모든 승인 상태)
+    - GET /programs/my: 신규 엔드포인트 (GET /programs/:id 앞에 배치)
+    - create-program.dto.ts: isB2b 필드 추가
+
+  Step 6: CronModule 확장                                           [완료]
+    - cron.module.ts: SettlementsModule import 추가
+    - @Cron('0 2 * * 3'): 매주 수요일 02:00 자동 정산
+    - Redis 분산 락(SETTLEMENT_LOCK_KEY_PREFIX + TTL 5분)으로 중복 방지
+    - 전주 월~일 기간 계산 → settlementsService.generateSettlements() 호출
+
+  Step 7: 통합 + 빌드 검증                                         [완료]
+    - app.module.ts: SettlementsModule, AdminModule import 추가
+    - pnpm run build 전체 4 패키지 빌드 성공
+
+Phase 4 신규 파일 (14개):
+  packages/shared/src/types/settlement.ts
+  apps/server/src/settlements/settlements.module.ts
+  apps/server/src/settlements/settlements.service.ts
+  apps/server/src/settlements/settlements.controller.ts
+  apps/server/src/settlements/dto/query-settlement.dto.ts
+  apps/server/src/settlements/dto/generate-settlement.dto.ts
+  apps/server/src/settlements/dto/update-settlement.dto.ts
+  apps/server/src/admin/admin.module.ts
+  apps/server/src/admin/admin.service.ts
+  apps/server/src/admin/admin.controller.ts
+  apps/server/src/admin/dto/admin-query-programs.dto.ts
+  apps/server/src/admin/dto/reject-program.dto.ts
+  apps/server/src/admin/dto/change-role.dto.ts
+  apps/server/src/admin/dto/admin-query-users.dto.ts
+
+Phase 4 수정 파일 (11개):
+  packages/shared/src/types/program.ts — ApprovalStatus enum, 필드 추가
+  packages/shared/src/types/notification.ts — NotificationType 3개 추가
+  packages/shared/src/constants/index.ts — 정산 관련 상수 6개 추가
+  packages/shared/src/index.ts — re-export 추가
+  apps/server/src/prisma/schema.prisma — 2 enum, Settlement 모델, Program 필드
+  apps/server/src/programs/programs.service.ts — APPROVED 필터, findMyPrograms()
+  apps/server/src/programs/programs.controller.ts — GET /programs/my
+  apps/server/src/programs/dto/create-program.dto.ts — isB2b 필드
+  apps/server/src/cron/cron.service.ts — 주간 정산 크론잡
+  apps/server/src/cron/cron.module.ts — SettlementsModule import
+  apps/server/src/app.module.ts — SettlementsModule, AdminModule import
+
+################################################################################
+# PART 7: Phase 4 완료 후 전체 코드 구조
 ################################################################################
 
 apps/server/src/
-  app.module.ts           — 루트 (ConfigModule, PrismaModule, RedisModule, AuthModule, ProgramsModule, ReservationsModule, PaymentsModule, AttendanceModule)
-  main.ts                 — NestJS 부트스트랩
+  app.module.ts           — 루트 (ConfigModule, PrismaModule, RedisModule, StorageModule, FcmModule,
+                            AuthModule, ProgramsModule, ReservationsModule, PaymentsModule,
+                            AttendanceModule, NotificationsModule, GalleryModule, CronModule,
+                            SettlementsModule, AdminModule)
+  main.ts                 — NestJS 부트스트랩 + Swagger 설정
   prisma/
     prisma.module.ts      — @Global() PrismaModule
     prisma.service.ts     — PrismaClient 래퍼
-    schema.prisma         — User, Program, Reservation, Gallery, Payment, Attendance
-                            + UserRole, ReservationStatus, PaymentMethod, PaymentStatus, AttendanceStatus enum
+    schema.prisma         — 8개 모델, 8개 enum
   auth/
     auth.module.ts, auth.controller.ts, auth.service.ts
     jwt.strategy.ts, jwt-auth.guard.ts, roles.guard.ts, roles.decorator.ts
@@ -201,88 +341,164 @@ apps/server/src/
     programs.module.ts, programs.controller.ts, programs.service.ts, dto/
   reservations/
     reservations.module.ts    — imports: PaymentsModule
-    reservations.controller.ts
-    reservations.service.ts   — create(Redis락+PENDING), cancel(PortOne환불), findAll, findOne
-    dto/                      — create-reservation.dto.ts, query-reservation.dto.ts
+    reservations.controller.ts, reservations.service.ts, dto/
   redis/
     redis.module.ts           — @Global()
-    redis.service.ts          — acquireLock, releaseLock (Lua)
+    redis.service.ts          — acquireLock, releaseLock, set, get, sAdd, sIsMember, expire
+  storage/
+    storage.module.ts         — @Global()
+    storage.service.ts        — S3 클라이언트 래퍼
+  fcm/
+    fcm.module.ts             — @Global()
+    fcm.service.ts            — Firebase Admin 래퍼
   payments/
     payments.module.ts        — exports: PaymentsService
-    payments.controller.ts    — POST /payments/prepare, POST /payments/webhook
-    payments.service.ts       — preparePayment, handleWebhook, processRefund
-    portone.service.ts        — PortOne V2 REST (preRegister, getPaymentDetail, requestRefund)
-    dto/
-      prepare-payment.dto.ts
-      webhook-payload.dto.ts
+    payments.controller.ts, payments.service.ts, portone.service.ts, dto/
   attendance/
     attendance.module.ts
-    attendance.controller.ts  — POST /check, GET /qr/:id, POST /qr/verify
-    attendance.service.ts     — markAttendance, getQrCode, verifyQrCode
-    dto/
-      mark-attendance.dto.ts
-      verify-qr.dto.ts
+    attendance.controller.ts, attendance.service.ts, dto/
+  notifications/
+    notifications.module.ts   — exports: NotificationsService
+    notifications.controller.ts, notifications.service.ts, dto/
+  gallery/
+    gallery.module.ts         — imports: NotificationsModule
+    gallery.controller.ts, gallery.service.ts, dto/
+  cron/
+    cron.module.ts            — imports: ScheduleModule.forRoot(), NotificationsModule, SettlementsModule
+    cron.service.ts           — 활동 알림 크론 + 주간 정산 크론
+  settlements/
+    settlements.module.ts     — imports: NotificationsModule, exports: SettlementsService
+    settlements.controller.ts — GET /settlements/my (INSTRUCTOR)
+    settlements.service.ts    — 정산 계산/생성/조회/상태변경
+    dto/                      — query-settlement, generate-settlement, update-settlement
+  admin/
+    admin.module.ts           — imports: NotificationsModule, SettlementsModule
+    admin.controller.ts       — 12개 어드민 엔드포인트 (ADMIN)
+    admin.service.ts          — 대시보드/프로그램 검수/사용자 관리
+    dto/                      — admin-query-programs, reject-program, change-role, admin-query-users
 
 packages/shared/src/
   index.ts                — 모든 타입/상수 re-export
   constants/index.ts      — REFUND_POLICY, SOFT_LOCK_DURATION_MS, PRE_ACTIVITY_NOTIFICATION_HOURS,
-                            REDIS_LOCK_TTL_MS, REDIS_LOCK_RETRY_INTERVAL_MS, REDIS_LOCK_MAX_RETRIES
+                            REDIS_LOCK_TTL_MS, REDIS_LOCK_RETRY_INTERVAL_MS, REDIS_LOCK_MAX_RETRIES,
+                            GALLERY_SIGNED_URL_EXPIRES_IN, GALLERY_UPLOAD_URL_EXPIRES_IN,
+                            THUMBNAIL_MAX_WIDTH, THUMBNAIL_QUALITY,
+                            PLATFORM_FEE_RATE, NOTIFICATION_COST_PER_MESSAGE,
+                            DEFAULT_B2B_COMMISSION_RATE, SETTLEMENT_CRON_EXPRESSION,
+                            SETTLEMENT_LOCK_KEY_PREFIX, SETTLEMENT_LOCK_TTL_MS
   types/
-    user.ts               — UserRole enum, User interface, AuthResponse interface
-    program.ts            — Program interface
-    reservation.ts        — ReservationStatus enum, Reservation interface
-    gallery.ts            — Gallery interface
-    payment.ts            — PaymentMethod enum, PaymentStatus enum, Payment interface
-    attendance.ts         — AttendanceStatus enum, Attendance interface
+    user.ts               — UserRole enum (PARENT, INSTRUCTOR, ADMIN), User, AuthResponse
+    program.ts            — ApprovalStatus enum (PENDING_REVIEW, APPROVED, REJECTED), Program interface
+    reservation.ts        — ReservationStatus enum (PENDING, CONFIRMED, CANCELLED, COMPLETED), Reservation
+    gallery.ts            — Gallery interface (imageKey, thumbnailKey, uploadedBy)
+    payment.ts            — PaymentMethod enum, PaymentStatus enum, Payment
+    attendance.ts         — AttendanceStatus enum (ATTENDED, NO_SHOW), Attendance
+    notification.ts       — NotificationType enum (PRE_ACTIVITY, GALLERY_UPLOADED, PROGRAM_APPROVED, PROGRAM_REJECTED, SETTLEMENT_CREATED), Notification
+    settlement.ts         — SettlementStatus enum (PENDING, CONFIRMED, PAID), Settlement interface
 
 ################################################################################
-# PART 6: 전체 API 엔드포인트 (Phase 2 완료 기준)
+# PART 8: 전체 API 엔드포인트 (Phase 4 완료 기준, 41개)
 ################################################################################
 
-인증:
-  POST /auth/register          — 로컬 회원가입
-  POST /auth/login             — 로컬 로그인 (JWT 발급)
-  POST /auth/kakao             — 카카오 OAuth 로그인
+인증 (3개):
+  POST /auth/register              — 로컬 회원가입
+  POST /auth/login                 — 로컬 로그인 (JWT 발급)
+  POST /auth/kakao                 — 카카오 OAuth 로그인
 
-프로그램:
-  GET  /programs               — 프로그램 검색/조회 (Public)
-  GET  /programs/:id           — 프로그램 상세 (Public)
-  POST /programs               — 프로그램 생성 (INSTRUCTOR)
-  PATCH /programs/:id          — 프로그램 수정 (INSTRUCTOR)
-  DELETE /programs/:id         — 프로그램 삭제 (INSTRUCTOR)
+프로그램 (5개):
+  GET  /programs                   — 프로그램 검색/조회 (Public, 승인된 것만)
+  GET  /programs/my                — 강사 본인 프로그램 조회 (INSTRUCTOR, 모든 상태)
+  GET  /programs/:id               — 프로그램 상세 (Public)
+  POST /programs                   — 프로그램 생성 (INSTRUCTOR)
+  PATCH /programs/:id              — 프로그램 수정 (INSTRUCTOR)
 
-예약:
-  POST /reservations           — 예약 생성 (PENDING + Redis 락)
-  GET  /reservations           — 내 예약 목록
-  GET  /reservations/:id       — 예약 상세
-  PATCH /reservations/:id/cancel — 예약 취소 (PortOne 실제 환불)
+예약 (4개):
+  POST /reservations               — 예약 생성 (PARENT, PENDING + Redis 락)
+  GET  /reservations               — 내 예약 목록
+  GET  /reservations/:id           — 예약 상세
+  PATCH /reservations/:id/cancel   — 예약 취소 (PortOne 환불)
 
-결제:
-  POST /payments/prepare       — 결제 세션 생성 (JWT)
-  POST /payments/webhook       — PortOne 웹훅 수신 (인증 없음)
+결제 (2개):
+  POST /payments/prepare           — 결제 세션 생성 (JWT)
+  POST /payments/webhook           — PortOne 웹훅 수신
 
-출석:
-  POST /attendance/check       — 수동 출석 체크 (INSTRUCTOR)
+출석 (3개):
+  POST /attendance/check           — 수동 출석 체크 (INSTRUCTOR)
   GET  /attendance/qr/:reservationId — QR 코드 조회 (JWT)
-  POST /attendance/qr/verify   — QR 스캔 출석 확인 (INSTRUCTOR)
+  POST /attendance/qr/verify       — QR 스캔 출석 확인 (INSTRUCTOR)
+
+알림 (4개):
+  GET  /notifications              — 내 알림 목록 (커서 페이지네이션)
+  GET  /notifications/unread-count — 읽지 않은 알림 수
+  PATCH /notifications/:id/read    — 알림 읽음 처리
+  PATCH /notifications/read-all    — 모든 알림 읽음 처리
+
+사진첩 (4개):
+  POST /gallery/upload-url         — Pre-signed 업로드 URL 요청 (INSTRUCTOR)
+  POST /gallery/confirm            — 업로드 확인 + 썸네일 생성 (INSTRUCTOR)
+  GET  /gallery/program/:programId — 사진첩 조회 (참여자/강사만, Signed URL)
+  DELETE /gallery/:id              — 사진 삭제 (INSTRUCTOR)
+
+정산 — 강사 (1개):
+  GET  /settlements/my             — 강사 본인 정산 조회 (INSTRUCTOR)
+
+어드민 (12개, 모두 JWT + ADMIN):
+  GET    /admin/dashboard/stats    — 대시보드 통계 (사용자/예약/매출/대기)
+  GET    /admin/programs           — 프로그램 목록 (approvalStatus 필터)
+  PATCH  /admin/programs/:id/approve — 프로그램 승인 + 강사 FCM 알림
+  PATCH  /admin/programs/:id/reject  — 프로그램 거절 (사유 필수) + 강사 FCM 알림
+  GET    /admin/settlements        — 정산 목록
+  GET    /admin/settlements/:id    — 정산 상세
+  POST   /admin/settlements/generate — 수동 정산 생성
+  PATCH  /admin/settlements/:id/confirm — 정산 확인 (PENDING → CONFIRMED)
+  PATCH  /admin/settlements/:id/pay    — 정산 지급 완료 (CONFIRMED → PAID)
+  PATCH  /admin/settlements/:id    — 정산 메모 수정
+  GET    /admin/users              — 사용자 목록 (역할/검색 필터, 페이지네이션)
+  PATCH  /admin/users/:id/role     — 사용자 역할 변경
+
+스케줄링 (2개):
+  CronJob @EVERY_HOUR              — 활동 24시간 전 알림 자동 발송
+  CronJob @0 2 * * 3               — 매주 수요일 02:00 주간 정산 자동 생성 (Redis 분산 락)
 
 환경변수 (.env.example):
   DATABASE_URL, PORT, JWT_SECRET, KAKAO_REST_API_KEY,
-  REDIS_URL, PORTONE_API_SECRET, PORTONE_STORE_ID, PORTONE_CHANNEL_KEY, PORTONE_WEBHOOK_SECRET
+  REDIS_URL, PORTONE_API_SECRET, PORTONE_STORE_ID, PORTONE_CHANNEL_KEY, PORTONE_WEBHOOK_SECRET,
+  AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_BUCKET, AWS_REGION,
+  FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
 
 ################################################################################
-# PART 7: 다음 단계 — Phase 3 (알림 자동화 + 사진첩 고도화)
+# PART 9: 다음 단계 — Phase 5 (어드민 대시보드 프론트엔드)
 ################################################################################
 
-PRD 기반 Phase 3 예상 범위:
-  - 활동 24시간 전 자동 알림 (Push/SMS) — Cron Job + FCM
-  - 강사가 갤러리 업로드 후 부모에게 Push 알림
-  - 이미지 업로드 최적화 (S3 + Lambda 리사이징 + CDN)
-  - 갤러리 접근 권한 (해당 예약자만 Signed URL)
+Phase 4에서 백엔드 API 12개가 완성됨. Phase 5에서 apps/admin Next.js 앱에 UI 구현.
 
-Phase 3 작업 재개 시:
+[TODO 1] 어드민 인증
+  - 로그인 페이지 (ADMIN 역할 체크)
+  - JWT 토큰 관리 (쿠키 or localStorage)
+  - 인증 미들웨어 / Protected Route
+
+[TODO 2] 대시보드 페이지
+  - GET /admin/dashboard/stats 연동
+  - 사용자 수, 예약 수, 총 매출, 검수 대기 프로그램 수 카드 표시
+
+[TODO 3] 프로그램 관리 페이지
+  - GET /admin/programs 연동 (approvalStatus 탭 필터)
+  - 승인/거절 버튼 (PATCH approve/reject)
+  - 프로그램 상세 모달/페이지
+
+[TODO 4] 정산 관리 페이지
+  - GET /admin/settlements 연동 (상태 필터, 페이지네이션)
+  - 정산 상세 (GET /admin/settlements/:id)
+  - 수동 정산 생성 (POST /admin/settlements/generate)
+  - 확인/지급 완료 버튼
+
+[TODO 5] 사용자 관리 페이지
+  - GET /admin/users 연동 (역할 필터, 검색)
+  - 역할 변경 (PATCH /admin/users/:id/role)
+
+Phase 5 작업 재개 시:
   이 파일을 컨텍스트로 전달하고:
-    "이 파일 읽고 Phase 3 계획 세워줘"
+    "이 파일 읽고 Phase 5 계획 세워줘"
   라고 요청하면 됨.
 
 ================================================================================
