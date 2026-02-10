@@ -1,8 +1,8 @@
 ================================================================================
 숲똑 (SoopTalk) — 전체 프로젝트 컨텍스트 + 다음 작업 TODO
 ================================================================================
-최종 업데이트: 2026-02-10
-현재 상태: Phase 4 완료 + 4가지 수정 적용 + 업체 미니홈페이지 기능 추가, Phase 5 미착수 (어드민 프론트엔드)
+최종 업데이트: 2026-02-11
+현재 상태: Phase 4 완료 + 4가지 수정 적용 + 업체 미니홈페이지 + 강사 신청/신뢰 UI/프로필 자동 구성, Phase 5 미착수 (어드민 프론트엔드)
 빌드 상태: pnpm run build 성공 (shared, server, admin, mobile 전체)
 
 ################################################################################
@@ -217,9 +217,10 @@ apps/server/src/
     dto/ (query-settlement, generate-settlement, update-settlement)
   admin/
     admin.module.ts (imports: NotificationsModule, SettlementsModule)
-    admin.controller.ts — 13개 어드민 엔드포인트 (ADMIN)
-    admin.service.ts — 대시보드/프로그램 검수/사용자 관리/캐시 충전
-    dto/ (admin-query-programs, reject-program, change-role, admin-query-users, charge-cash)
+    admin.controller.ts — 17개 어드민 엔드포인트 (ADMIN)
+    admin.service.ts — 대시보드/프로그램 검수/사용자 관리/캐시 충전/강사 관리
+    dto/ (admin-query-programs, reject-program, change-role, admin-query-users, charge-cash,
+          admin-query-instructors, reject-instructor, update-certifications)
   providers/
     providers.module.ts (exports: ProvidersService)
     providers.controller.ts — 5개 업체 프로필 엔드포인트
@@ -239,13 +240,13 @@ packages/shared/src/
                             PROVIDER_COVER_UPLOAD_URL_EXPIRES_IN, PROVIDER_COVER_MAX_COUNT,
                             PROVIDER_CONTACT_LINKS_MAX_COUNT, PROVIDER_INTRO_SHORT_MAX_LENGTH
   types/
-    user.ts               — UserRole enum (PARENT, INSTRUCTOR, ADMIN), User, AuthResponse
+    user.ts               — UserRole enum (PARENT, INSTRUCTOR, ADMIN), InstructorStatus enum (NONE, APPLIED, APPROVED, REJECTED), InstructorCertification, User, AuthResponse
     program.ts            — ApprovalStatus enum (PENDING_REVIEW, APPROVED, REJECTED), Program interface
     reservation.ts        — ReservationStatus enum (PENDING, CONFIRMED, CANCELLED, COMPLETED), Reservation
     gallery.ts            — Gallery interface (imageKey, thumbnailKey, uploadedBy)
     payment.ts            — PaymentMethod enum, PaymentStatus enum, Payment
     attendance.ts         — AttendanceStatus enum (ATTENDED, NO_SHOW), Attendance
-    notification.ts       — NotificationType enum (PRE_ACTIVITY, GALLERY_UPLOADED, PROGRAM_APPROVED, PROGRAM_REJECTED, SETTLEMENT_CREATED), Notification
+    notification.ts       — NotificationType enum (PRE_ACTIVITY, GALLERY_UPLOADED, PROGRAM_APPROVED, PROGRAM_REJECTED, SETTLEMENT_CREATED, INSTRUCTOR_APPROVED, INSTRUCTOR_REJECTED), Notification
     settlement.ts         — SettlementStatus enum (PENDING, CONFIRMED, PAID), Settlement interface
     provider.ts           — ProviderRole enum (OWNER, MANAGER, INSTRUCTOR), ProviderMemberStatus enum (ACTIVE, INVITED, SUSPENDED), Provider/ProviderMember/ProviderProfile interfaces
 
@@ -253,15 +254,16 @@ packages/shared/src/
 # PART 7: Prisma 모델 요약
 ################################################################################
 
-enum (10개): UserRole, ReservationStatus, PaymentMethod, PaymentStatus, AttendanceStatus, NotificationType, ApprovalStatus, SettlementStatus, ProviderRole, ProviderMemberStatus
+enum (11개): UserRole, ReservationStatus, PaymentMethod, PaymentStatus, AttendanceStatus, NotificationType, ApprovalStatus, SettlementStatus, ProviderRole, ProviderMemberStatus, InstructorStatus
 
 User:
-  id, email(unique), name, role, kakaoId?(unique), profileImageUrl?, phoneNumber, fcmToken?, messageCashBalance(default 0)
+  id, email(unique), name, role, kakaoId?(unique), profileImageUrl?, phoneNumber, fcmToken?, messageCashBalance(default 0),
+  instructorStatus(default NONE), instructorStatusReason?, certifications(Json default [])
   relations: programs[], reservations[], checkedAttendances[], notifications[], uploadedPhotos[], settlements[], providerMemberships[]
 
 Program:
   id, instructorId, title, description, location, latitude, longitude, price, maxCapacity, minAge, scheduleAt,
-  approvalStatus(default PENDING_REVIEW), rejectionReason?, isB2b(default false), providerId?
+  approvalStatus(default PENDING_REVIEW), rejectionReason?, isB2b(default false), safetyGuide?, insuranceCovered(default false), providerId?
   index: [approvalStatus]
   relations: instructor(User), provider?(Provider), reservations[], gallery[]
 
@@ -308,8 +310,9 @@ ProviderProfile:
 # PART 8: 전체 API 엔드포인트 (46개)
 ################################################################################
 
-인증 (1개):
+인증 (2개):
   POST /auth/kakao                 — 카카오 로그인 (유일한 인증, 첫 가입 시 role 지정 가능)
+  POST /auth/apply-instructor      — 강사 신청 (JWT, PARENT → INSTRUCTOR 전환, instructorStatus=APPLIED)
 
 프로그램 (5개):
   GET  /programs                   — 프로그램 검색/조회 (Public, 승인된 것만)
@@ -349,8 +352,12 @@ ProviderProfile:
 정산 — 강사 (1개):
   GET  /settlements/my             — 강사 본인 정산 조회 (INSTRUCTOR)
 
-어드민 (13개, 모두 JWT + ADMIN):
-  GET    /admin/dashboard/stats    — 대시보드 통계 (사용자/예약/매출/대기)
+어드민 (17개, 모두 JWT + ADMIN):
+  GET    /admin/dashboard/stats    — 대시보드 통계 (사용자/예약/매출/대기/강사대기)
+  GET    /admin/instructors        — 강사 신청 목록 (instructorStatus 필터, 검색, 페이지네이션)
+  PATCH  /admin/instructors/:id/approve — 강사 승인 + FCM 알림
+  PATCH  /admin/instructors/:id/reject  — 강사 거절 (사유 필수) + FCM 알림
+  PATCH  /admin/instructors/:id/certifications — 강사 인증 뱃지 수정
   GET    /admin/programs           — 프로그램 목록 (approvalStatus 필터)
   PATCH  /admin/programs/:id/approve — 프로그램 승인 + 강사 FCM 알림
   PATCH  /admin/programs/:id/reject  — 프로그램 거절 (사유 필수) + 강사 FCM 알림

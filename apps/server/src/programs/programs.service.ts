@@ -63,6 +63,15 @@ export class ProgramsService {
   }
 
   async create(instructorId: string, dto: CreateProgramDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: instructorId },
+      select: { instructorStatus: true },
+    });
+
+    if (!user || user.instructorStatus !== 'APPROVED') {
+      throw new ForbiddenException('승인된 강사만 프로그램을 등록할 수 있습니다');
+    }
+
     return this.prisma.program.create({
       data: {
         ...dto,

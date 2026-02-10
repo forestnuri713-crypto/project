@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { KakaoLoginDto } from './dto/kakao-login.dto';
@@ -44,6 +44,7 @@ export class AuthService {
         if (!email) {
           throw new UnauthorizedException('카카오 계정에 이메일 정보가 필요합니다');
         }
+        const role = dto.role ?? 'PARENT';
         user = await this.prisma.user.create({
           data: {
             email,
@@ -51,7 +52,8 @@ export class AuthService {
             name: nickname,
             profileImageUrl,
             phoneNumber: '',
-            role: dto.role ?? 'PARENT',
+            role,
+            instructorStatus: role === 'INSTRUCTOR' ? 'APPLIED' : 'NONE',
           },
         });
       }
@@ -62,6 +64,38 @@ export class AuthService {
       accessToken: token,
       user,
     };
+  }
+
+  async applyAsInstructor(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) {
+      throw new UnauthorizedException('사용자를 찾을 수 없습니다');
+    }
+
+    if (user.role === 'ADMIN') {
+      throw new BadRequestException('관리자는 강사 신청을 할 수 없습니다');
+    }
+
+    if (user.instructorStatus === 'APPROVED') {
+      throw new BadRequestException('이미 승인된 강사입니다');
+    }
+
+    if (user.instructorStatus === 'APPLIED') {
+      throw new BadRequestException('이미 강사 신청 중입니다');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        role: 'INSTRUCTOR',
+        instructorStatus: 'APPLIED',
+        instructorStatusReason: null,
+      },
+    });
+
+    const token = this.generateToken(updated);
+    return { accessToken: token, user: updated };
   }
 
   private generateToken(user: { id: string; email: string; role: string }): string {

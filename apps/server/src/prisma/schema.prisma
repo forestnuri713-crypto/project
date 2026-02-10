@@ -44,6 +44,15 @@ enum NotificationType {
   PROGRAM_APPROVED
   PROGRAM_REJECTED
   SETTLEMENT_CREATED
+  INSTRUCTOR_APPROVED
+  INSTRUCTOR_REJECTED
+}
+
+enum InstructorStatus {
+  NONE
+  APPLIED
+  APPROVED
+  REJECTED
 }
 
 enum ApprovalStatus {
@@ -79,9 +88,12 @@ model User {
   profileImageUrl    String?  @map("profile_image_url")
   phoneNumber        String   @map("phone_number")
   fcmToken           String?  @map("fcm_token")
-  messageCashBalance Int      @default(0) @map("message_cash_balance")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  messageCashBalance     Int              @default(0) @map("message_cash_balance")
+  instructorStatus       InstructorStatus @default(NONE) @map("instructor_status")
+  instructorStatusReason String?          @map("instructor_status_reason")
+  certifications         Json             @default("[]")
+  createdAt              DateTime         @default(now()) @map("created_at")
+  updatedAt              DateTime         @updatedAt @map("updated_at")
 
   programs           Program[]
   reservations       Reservation[]
@@ -108,11 +120,13 @@ model Program {
   scheduleAt      DateTime       @map("schedule_at")
   approvalStatus  ApprovalStatus @default(PENDING_REVIEW)
   rejectionReason String?        @map("rejection_reason")
-  isB2b           Boolean        @default(false) @map("is_b2b")
-  createdAt       DateTime       @default(now()) @map("created_at")
-  updatedAt       DateTime       @updatedAt @map("updated_at")
+  isB2b            Boolean        @default(false) @map("is_b2b")
+  safetyGuide      String?        @map("safety_guide")
+  insuranceCovered Boolean        @default(false) @map("insurance_covered")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
 
-  providerId      String?        @map("provider_id")
+  providerId       String?        @map("provider_id")
 
   instructor   User          @relation(fields: [instructorId], references: [id])
   provider     Provider?     @relation(fields: [providerId], references: [id])

@@ -20,6 +20,8 @@ export interface Program {
   rejectionReason?: string;
   isB2b: boolean;
   providerId?: string;
+  safetyGuide?: string;
+  insuranceCovered: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

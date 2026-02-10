@@ -1,5 +1,5 @@
-export { UserRole } from './types/user';
-export type { User, AuthResponse } from './types/user';
+export { UserRole, InstructorStatus } from './types/user';
+export type { User, AuthResponse, InstructorCertification } from './types/user';
 
 export { ApprovalStatus } from './types/program';
 export type { Program } from './types/program';
@@ -51,4 +51,7 @@ export {
   PROVIDER_COVER_MAX_COUNT,
   PROVIDER_CONTACT_LINKS_MAX_COUNT,
   PROVIDER_INTRO_SHORT_MAX_LENGTH,
+  PROVIDER_GALLERY_PREVIEW_MAX_COUNT,
+  INSTRUCTOR_CERTIFICATIONS_MAX_COUNT,
+  PROGRAM_SAFETY_GUIDE_MAX_LENGTH,
 } from './constants';

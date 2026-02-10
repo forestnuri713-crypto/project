@@ -72,3 +72,12 @@ export const PROVIDER_CONTACT_LINKS_MAX_COUNT = 3;
 
 /** 업체 한줄 소개 최대 길이 */
 export const PROVIDER_INTRO_SHORT_MAX_LENGTH = 40;
+
+/** 업체 프로필 갤러리 미리보기 최대 개수 */
+export const PROVIDER_GALLERY_PREVIEW_MAX_COUNT = 20;
+
+/** 강사 자격 인증 뱃지 최대 개수 */
+export const INSTRUCTOR_CERTIFICATIONS_MAX_COUNT = 10;
+
+/** 프로그램 안전 가이드 최대 길이 */
+export const PROGRAM_SAFETY_GUIDE_MAX_LENGTH = 500;

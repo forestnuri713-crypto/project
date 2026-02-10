@@ -20,6 +20,9 @@ import { RejectProgramDto } from './dto/reject-program.dto';
 import { ChangeRoleDto } from './dto/change-role.dto';
 import { AdminQueryUsersDto } from './dto/admin-query-users.dto';
 import { ChargeCashDto } from './dto/charge-cash.dto';
+import { AdminQueryInstructorsDto } from './dto/admin-query-instructors.dto';
+import { RejectInstructorDto } from './dto/reject-instructor.dto';
+import { UpdateCertificationsDto } from './dto/update-certifications.dto';
 import { QuerySettlementDto } from '../settlements/dto/query-settlement.dto';
 import { GenerateSettlementDto } from '../settlements/dto/generate-settlement.dto';
 import { UpdateSettlementDto } from '../settlements/dto/update-settlement.dto';
@@ -99,6 +102,32 @@ export class AdminController {
   @ApiOperation({ summary: '정산 메모 수정' })
   updateSettlement(@Param('id') id: string, @Body() dto: UpdateSettlementDto) {
     return this.settlementsService.update(id, dto);
+  }
+
+  // ─── Instructors ────────────────────────────────────
+
+  @Get('instructors')
+  @ApiOperation({ summary: '강사 신청 목록 (필터/페이지네이션)' })
+  findInstructors(@Query() query: AdminQueryInstructorsDto) {
+    return this.adminService.findInstructorApplications(query);
+  }
+
+  @Patch('instructors/:id/approve')
+  @ApiOperation({ summary: '강사 승인' })
+  approveInstructor(@Param('id') id: string) {
+    return this.adminService.approveInstructor(id);
+  }
+
+  @Patch('instructors/:id/reject')
+  @ApiOperation({ summary: '강사 거절 (사유 필수)' })
+  rejectInstructor(@Param('id') id: string, @Body() dto: RejectInstructorDto) {
+    return this.adminService.rejectInstructor(id, dto);
+  }
+
+  @Patch('instructors/:id/certifications')
+  @ApiOperation({ summary: '강사 인증 뱃지 수정' })
+  updateCertifications(@Param('id') id: string, @Body() dto: UpdateCertificationsDto) {
+    return this.adminService.updateInstructorCertifications(id, dto);
   }
 
   // ─── Users ───────────────────────────────────────────

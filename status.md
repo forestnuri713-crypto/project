@@ -162,5 +162,42 @@ netAmount        = grossAmount - refundAmount - platformFee - notificationCost -
 - 미공개 프로필 → 404 (존재 여부 노출 방지)
 - S3 키 저장 (URL 아님, presigned URL 재생성 가능)
 
+## 강사 신청 + 신뢰 UI + 프로필 자동 구성 추가
+
+### Shared 패키지
+- `types/user.ts` 수정 — `InstructorStatus` enum (NONE, APPLIED, APPROVED, REJECTED), `InstructorCertification` interface, User에 `instructorStatus`/`instructorStatusReason`/`certifications` 필드 추가
+- `types/program.ts` 수정 — `safetyGuide?`, `insuranceCovered` 필드 추가
+- `types/notification.ts` 수정 — `INSTRUCTOR_APPROVED`, `INSTRUCTOR_REJECTED` 추가
+- `constants/index.ts` 수정 — `PROVIDER_GALLERY_PREVIEW_MAX_COUNT`, `INSTRUCTOR_CERTIFICATIONS_MAX_COUNT`, `PROGRAM_SAFETY_GUIDE_MAX_LENGTH` 추가
+
+### Prisma 스키마
+- `InstructorStatus` enum 추가 (NONE, APPLIED, APPROVED, REJECTED)
+- `NotificationType`에 `INSTRUCTOR_APPROVED`, `INSTRUCTOR_REJECTED` 추가
+- `User` 모델: `instructorStatus`(default NONE), `instructorStatusReason?`, `certifications`(Json default []) 추가
+- `Program` 모델: `safetyGuide?`, `insuranceCovered`(default false) 추가
+- 마이그레이션 주의: 기존 INSTRUCTOR 역할 사용자를 `instructorStatus = APPROVED`로 일괄 업데이트 필요
+
+### 강사 신청 플로우
+- `POST /auth/apply-instructor` (JWT) — PARENT → INSTRUCTOR + instructorStatus=APPLIED
+- 카카오 로그인 시 role=INSTRUCTOR이면 instructorStatus=APPLIED로 생성
+- REJECTED 상태에서 재신청 가능
+
+### 어드민 강사 관리 (4 endpoints)
+- `GET /admin/instructors` — 강사 신청 목록 (instructorStatus 필터, 검색, 페이지네이션)
+- `PATCH /admin/instructors/:id/approve` — 강사 승인 + FCM 알림
+- `PATCH /admin/instructors/:id/reject` — 강사 거절 (사유 필수) + FCM 알림
+- `PATCH /admin/instructors/:id/certifications` — 인증 뱃지 수정 (최대 10개)
+- 대시보드 통계에 `pendingInstructors` 카운트 추가
+
+### 프로그램 생성 시 강사 승인 검증
+- `create()` — `instructorStatus !== 'APPROVED'`이면 ForbiddenException
+- `create-program.dto.ts` — `safetyGuide?` (MaxLength 500), `insuranceCovered?` 추가
+
+### 공개 프로필 자동 구성
+- `getPublicProfile()` 리라이트: 멤버 userId 기반 프로그램 자동 조회 + 갤러리 최근 20개 포함
+- 프로그램 OR 조건: `instructorId IN memberUserIds OR providerId = providerId`
+- 멤버에 `certifications` 뱃지 포함
+- 갤러리 thumbnailKey → presigned URL 자동 생성
+
 ## 빌드 상태
 - `pnpm run build` — 전체 빌드 성공 (shared, server, admin, mobile)

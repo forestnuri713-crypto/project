@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsDateString, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class CreateProgramDto {
   @ApiProperty({ example: '숲속 체험 교실' })
@@ -48,4 +48,15 @@ export class CreateProgramDto {
   @IsOptional()
   @IsBoolean()
   isB2b?: boolean;
+
+  @ApiPropertyOptional({ example: '야외 활동 시 안전모 착용 필수, 우천 시 실내 대체 활동 진행', description: '안전 가이드' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  safetyGuide?: string;
+
+  @ApiPropertyOptional({ example: true, description: '보험 적용 여부' })
+  @IsOptional()
+  @IsBoolean()
+  insuranceCovered?: boolean;
 }

@@ -4,6 +4,19 @@ export enum UserRole {
   ADMIN = 'ADMIN',
 }
 
+export enum InstructorStatus {
+  NONE = 'NONE',
+  APPLIED = 'APPLIED',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+}
+
+export interface InstructorCertification {
+  type: string;
+  label: string;
+  iconType: string;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -14,6 +27,9 @@ export interface User {
   phoneNumber: string;
   fcmToken?: string;
   messageCashBalance: number;
+  instructorStatus: InstructorStatus;
+  instructorStatusReason?: string;
+  certifications: InstructorCertification[];
   createdAt: Date;
   updatedAt: Date;
 }
