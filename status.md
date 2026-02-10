@@ -1,4 +1,4 @@
-# Phase 4: 정산 시스템 + 어드민 API (백엔드) — 완료
+# Phase 4: 정산 시스템 + 어드민 API (백엔드) + 업체 미니홈페이지 — 완료
 
 ## 작업 요약
 
@@ -126,6 +126,41 @@ netAmount        = grossAmount - refundAmount - platformFee - notificationCost -
 | GET | /admin/users | JWT | ADMIN | 사용자 목록 |
 | PATCH | /admin/users/:id/role | JWT | ADMIN | 사용자 역할 변경 |
 | POST | /admin/users/:id/charge-cash | JWT | ADMIN | 알림 캐시 충전 |
+| PUT | /providers/profile | JWT | OWNER/MANAGER | 업체 프로필 upsert |
+| POST | /providers/profile/cover-images/presign | JWT | OWNER/MANAGER | 커버 이미지 presigned URL |
+| PATCH | /providers/profile/publish | JWT | OWNER/MANAGER | 프로필 공개/비공개 전환 |
+| GET | /providers/:id/profile | - | - | 업체 공개 프로필 조회 |
+| GET | /providers/:id/members | JWT | OWNER/MANAGER | 업체 소속 멤버 목록 |
+
+## 업체 미니홈페이지 (Provider Mini Homepage) 추가
+
+### Shared 패키지
+- `packages/shared/src/types/provider.ts` 신규 — `ProviderRole` enum (OWNER, MANAGER, INSTRUCTOR), `ProviderMemberStatus` enum (ACTIVE, INVITED, SUSPENDED), `Provider`/`ProviderMember`/`ProviderProfile` interfaces
+- `packages/shared/src/types/program.ts` 수정 — `providerId?` 필드 추가
+- `packages/shared/src/constants/index.ts` 수정 — `PROVIDER_COVER_UPLOAD_URL_EXPIRES_IN`, `PROVIDER_COVER_MAX_COUNT`, `PROVIDER_CONTACT_LINKS_MAX_COUNT`, `PROVIDER_INTRO_SHORT_MAX_LENGTH` 추가
+- `packages/shared/src/index.ts` 수정 — 새 타입/상수 re-export
+
+### Prisma 스키마
+- `ProviderRole`, `ProviderMemberStatus` enum 추가
+- `Provider` 모델 신규: id, name, businessType?, regionTags?(Json), phone?, email?
+- `ProviderMember` 모델 신규: id, providerId, userId, roleInProvider, status(default ACTIVE), @@unique([providerId, userId])
+- `ProviderProfile` 모델 신규: id, providerId(unique), displayName, introShort?, certificationsText?, storyText?, coverImageUrls(Json default []), contactLinks(Json default []), isPublished(default false)
+- `User` 모델: `providerMemberships[]` 관계 추가
+- `Program` 모델: `providerId?` + `provider` 관계 추가
+
+### ProvidersModule (5 endpoints)
+- `PUT /providers/profile` — 프로필 upsert (JWT, OWNER/MANAGER, 서비스 레벨 권한 체크)
+- `POST /providers/profile/cover-images/presign` — 커버 이미지 S3 presigned URL (JWT, OWNER/MANAGER)
+- `PATCH /providers/profile/publish` — 공개/비공개 전환 (JWT, OWNER/MANAGER)
+- `GET /providers/:id/profile` — 공개 프로필 조회 (Public, 미공개시 404)
+- `GET /providers/:id/members` — 소속 멤버 목록 (JWT, OWNER/MANAGER)
+
+### 핵심 설계 결정
+- coverImageUrls/contactLinks → Json 컬럼 (최대 3개 소규모 배열)
+- Program.providerId nullable (기존 프로그램 마이그레이션 호환)
+- 서비스 레벨 권한 체크 (Guard 대신 `verifyProviderRole()` 헬퍼)
+- 미공개 프로필 → 404 (존재 여부 노출 방지)
+- S3 키 저장 (URL 아님, presigned URL 재생성 가능)
 
 ## 빌드 상태
 - `pnpm run build` — 전체 빌드 성공 (shared, server, admin, mobile)

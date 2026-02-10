@@ -21,6 +21,13 @@ export type { Notification } from './types/notification';
 export { SettlementStatus } from './types/settlement';
 export type { Settlement } from './types/settlement';
 
+export { ProviderRole, ProviderMemberStatus } from './types/provider';
+export type {
+  Provider,
+  ProviderMember,
+  ProviderProfile,
+} from './types/provider';
+
 export {
   REFUND_POLICY,
   SOFT_LOCK_DURATION_MS,
@@ -40,4 +47,8 @@ export {
   SETTLEMENT_LOCK_TTL_MS,
   AUTO_CHECKIN_RADIUS_METERS,
   AUTO_CHECKIN_TIME_WINDOW_MINUTES,
+  PROVIDER_COVER_UPLOAD_URL_EXPIRES_IN,
+  PROVIDER_COVER_MAX_COUNT,
+  PROVIDER_CONTACT_LINKS_MAX_COUNT,
+  PROVIDER_INTRO_SHORT_MAX_LENGTH,
 } from './constants';

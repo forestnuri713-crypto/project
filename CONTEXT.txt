@@ -2,7 +2,7 @@
 숲똑 (SoopTalk) — 전체 프로젝트 컨텍스트 + 다음 작업 TODO
 ================================================================================
 최종 업데이트: 2026-02-10
-현재 상태: Phase 4 완료 + 4가지 수정 적용, Phase 5 미착수 (어드민 프론트엔드)
+현재 상태: Phase 4 완료 + 4가지 수정 적용 + 업체 미니홈페이지 기능 추가, Phase 5 미착수 (어드민 프론트엔드)
 빌드 상태: pnpm run build 성공 (shared, server, admin, mobile 전체)
 
 ################################################################################
@@ -165,12 +165,12 @@ apps/server/src/
   app.module.ts           — ConfigModule, PrismaModule, RedisModule, StorageModule, FcmModule,
                             AuthModule, ProgramsModule, ReservationsModule, PaymentsModule,
                             AttendanceModule, NotificationsModule, GalleryModule, CronModule,
-                            SettlementsModule, AdminModule
+                            SettlementsModule, AdminModule, ProvidersModule
   main.ts                 — NestJS 부트스트랩 + Swagger 설정
   prisma/
     prisma.module.ts      — @Global() PrismaModule
     prisma.service.ts     — PrismaClient 래퍼
-    schema.prisma         — 8개 모델, 8개 enum (아래 참조)
+    schema.prisma         — 11개 모델, 10개 enum (아래 참조)
   redis/
     redis.module.ts       — @Global()
     redis.service.ts      — acquireLock, releaseLock, set, get, sAdd, sIsMember, expire
@@ -220,6 +220,11 @@ apps/server/src/
     admin.controller.ts — 13개 어드민 엔드포인트 (ADMIN)
     admin.service.ts — 대시보드/프로그램 검수/사용자 관리/캐시 충전
     dto/ (admin-query-programs, reject-program, change-role, admin-query-users, charge-cash)
+  providers/
+    providers.module.ts (exports: ProvidersService)
+    providers.controller.ts — 5개 업체 프로필 엔드포인트
+    providers.service.ts — 프로필 upsert/조회/공개/멤버목록/커버이미지 presign
+    dto/ (upsert-profile, presign-cover, publish-profile)
 
 packages/shared/src/
   index.ts                — 모든 타입/상수 re-export
@@ -230,7 +235,9 @@ packages/shared/src/
                             PLATFORM_FEE_RATE, NOTIFICATION_COST_PER_MESSAGE,
                             DEFAULT_B2B_COMMISSION_RATE, SETTLEMENT_CRON_EXPRESSION,
                             SETTLEMENT_LOCK_KEY_PREFIX, SETTLEMENT_LOCK_TTL_MS,
-                            AUTO_CHECKIN_RADIUS_METERS, AUTO_CHECKIN_TIME_WINDOW_MINUTES
+                            AUTO_CHECKIN_RADIUS_METERS, AUTO_CHECKIN_TIME_WINDOW_MINUTES,
+                            PROVIDER_COVER_UPLOAD_URL_EXPIRES_IN, PROVIDER_COVER_MAX_COUNT,
+                            PROVIDER_CONTACT_LINKS_MAX_COUNT, PROVIDER_INTRO_SHORT_MAX_LENGTH
   types/
     user.ts               — UserRole enum (PARENT, INSTRUCTOR, ADMIN), User, AuthResponse
     program.ts            — ApprovalStatus enum (PENDING_REVIEW, APPROVED, REJECTED), Program interface
@@ -240,22 +247,23 @@ packages/shared/src/
     attendance.ts         — AttendanceStatus enum (ATTENDED, NO_SHOW), Attendance
     notification.ts       — NotificationType enum (PRE_ACTIVITY, GALLERY_UPLOADED, PROGRAM_APPROVED, PROGRAM_REJECTED, SETTLEMENT_CREATED), Notification
     settlement.ts         — SettlementStatus enum (PENDING, CONFIRMED, PAID), Settlement interface
+    provider.ts           — ProviderRole enum (OWNER, MANAGER, INSTRUCTOR), ProviderMemberStatus enum (ACTIVE, INVITED, SUSPENDED), Provider/ProviderMember/ProviderProfile interfaces
 
 ################################################################################
 # PART 7: Prisma 모델 요약
 ################################################################################
 
-enum (8개): UserRole, ReservationStatus, PaymentMethod, PaymentStatus, AttendanceStatus, NotificationType, ApprovalStatus, SettlementStatus
+enum (10개): UserRole, ReservationStatus, PaymentMethod, PaymentStatus, AttendanceStatus, NotificationType, ApprovalStatus, SettlementStatus, ProviderRole, ProviderMemberStatus
 
 User:
   id, email(unique), name, role, kakaoId?(unique), profileImageUrl?, phoneNumber, fcmToken?, messageCashBalance(default 0)
-  relations: programs[], reservations[], checkedAttendances[], notifications[], uploadedPhotos[], settlements[]
+  relations: programs[], reservations[], checkedAttendances[], notifications[], uploadedPhotos[], settlements[], providerMemberships[]
 
 Program:
   id, instructorId, title, description, location, latitude, longitude, price, maxCapacity, minAge, scheduleAt,
-  approvalStatus(default PENDING_REVIEW), rejectionReason?, isB2b(default false)
+  approvalStatus(default PENDING_REVIEW), rejectionReason?, isB2b(default false), providerId?
   index: [approvalStatus]
-  relations: instructor(User), reservations[], gallery[]
+  relations: instructor(User), provider?(Provider), reservations[], gallery[]
 
 Reservation:
   id, userId, programId, status(default PENDING), participantCount, totalPrice
@@ -283,8 +291,21 @@ Settlement:
   unique: [instructorId, periodStart, periodEnd]
   relations: instructor(User)
 
+Provider:
+  id, name, businessType?, regionTags?(Json), phone?, email?
+  relations: members[], profile?(1:1), programs[]
+
+ProviderMember:
+  id, providerId, userId, roleInProvider(ProviderRole), status(default ACTIVE)
+  unique: [providerId, userId]
+  relations: provider(Provider), user(User)
+
+ProviderProfile:
+  id, providerId(unique), displayName, introShort?, certificationsText?, storyText?, coverImageUrls(Json default []), contactLinks(Json default []), isPublished(default false)
+  relations: provider(Provider)
+
 ################################################################################
-# PART 8: 전체 API 엔드포인트 (41개)
+# PART 8: 전체 API 엔드포인트 (46개)
 ################################################################################
 
 인증 (1개):
@@ -342,6 +363,13 @@ Settlement:
   GET    /admin/users              — 사용자 목록 (역할/검색 필터, 페이지네이션)
   PATCH  /admin/users/:id/role     — 사용자 역할 변경
   POST   /admin/users/:id/charge-cash — 사용자 알림 캐시 충전
+
+업체 미니홈페이지 (5개):
+  PUT    /providers/profile                       — 업체 프로필 upsert (JWT, OWNER/MANAGER)
+  POST   /providers/profile/cover-images/presign  — 커버 이미지 S3 presigned URL (JWT, OWNER/MANAGER)
+  PATCH  /providers/profile/publish               — 업체 프로필 공개/비공개 전환 (JWT, OWNER/MANAGER)
+  GET    /providers/:id/profile                   — 업체 공개 프로필 조회 (Public, 미공개시 404)
+  GET    /providers/:id/members                   — 업체 소속 멤버 목록 (JWT, OWNER/MANAGER)
 
 스케줄링 (2개):
   CronJob @EVERY_HOUR              — 활동 24시간 전 알림 자동 발송

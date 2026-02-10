@@ -19,6 +19,7 @@ export interface Program {
   approvalStatus: ApprovalStatus;
   rejectionReason?: string;
   isB2b: boolean;
+  providerId?: string;
   createdAt: Date;
   updatedAt: Date;
 }

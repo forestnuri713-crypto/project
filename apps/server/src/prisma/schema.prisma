@@ -58,6 +58,18 @@ enum SettlementStatus {
   PAID
 }
 
+enum ProviderRole {
+  OWNER
+  MANAGER
+  INSTRUCTOR
+}
+
+enum ProviderMemberStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
 model User {
   id                 String   @id @default(uuid())
   email              String   @unique
@@ -77,6 +89,7 @@ model User {
   notifications      Notification[]
   uploadedPhotos     Gallery[]     @relation("GalleryUploader")
   settlements        Settlement[]
+  providerMemberships ProviderMember[]
 
   @@map("users")
 }
@@ -99,7 +112,10 @@ model Program {
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @updatedAt @map("updated_at")
 
+  providerId      String?        @map("provider_id")
+
   instructor   User          @relation(fields: [instructorId], references: [id])
+  provider     Provider?     @relation(fields: [providerId], references: [id])
   reservations Reservation[]
   gallery      Gallery[]
 
@@ -212,4 +228,54 @@ model Settlement {
 
   @@unique([instructorId, periodStart, periodEnd])
   @@map("settlements")
+}
+
+model Provider {
+  id           String   @id @default(uuid())
+  name         String
+  businessType String?  @map("business_type")
+  regionTags   Json?    @map("region_tags")
+  phone        String?
+  email        String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  members  ProviderMember[]
+  profile  ProviderProfile?
+  programs Program[]
+
+  @@map("providers")
+}
+
+model ProviderMember {
+  id             String               @id @default(uuid())
+  providerId     String               @map("provider_id")
+  userId         String               @map("user_id")
+  roleInProvider ProviderRole         @map("role_in_provider")
+  status         ProviderMemberStatus @default(ACTIVE)
+  createdAt      DateTime             @default(now()) @map("created_at")
+
+  provider Provider @relation(fields: [providerId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@unique([providerId, userId])
+  @@map("provider_members")
+}
+
+model ProviderProfile {
+  id                 String   @id @default(uuid())
+  providerId         String   @unique @map("provider_id")
+  displayName        String   @map("display_name")
+  introShort         String?  @map("intro_short")
+  certificationsText String?  @map("certifications_text")
+  storyText          String?  @map("story_text")
+  coverImageUrls     Json     @default("[]") @map("cover_image_urls")
+  contactLinks       Json     @default("[]") @map("contact_links")
+  isPublished        Boolean  @default(false) @map("is_published")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  provider Provider @relation(fields: [providerId], references: [id])
+
+  @@map("provider_profiles")
 }

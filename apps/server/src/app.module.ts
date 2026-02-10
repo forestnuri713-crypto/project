@@ -14,6 +14,7 @@ import { GalleryModule } from './gallery/gallery.module';
 import { CronModule } from './cron/cron.module';
 import { SettlementsModule } from './settlements/settlements.module';
 import { AdminModule } from './admin/admin.module';
+import { ProvidersModule } from './providers/providers.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { AdminModule } from './admin/admin.module';
     CronModule,
     SettlementsModule,
     AdminModule,
+    ProvidersModule,
   ],
 })
 export class AppModule {}

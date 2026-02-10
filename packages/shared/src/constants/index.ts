@@ -60,3 +60,15 @@ export const AUTO_CHECKIN_RADIUS_METERS = 100;
 
 /** 자동 출석 체크 시간 범위 (분) — 프로그램 시작 시간 전후 */
 export const AUTO_CHECKIN_TIME_WINDOW_MINUTES = 30;
+
+/** 업체 커버 이미지 Pre-signed URL 만료 시간 (초) */
+export const PROVIDER_COVER_UPLOAD_URL_EXPIRES_IN = 600;
+
+/** 업체 커버 이미지 최대 개수 */
+export const PROVIDER_COVER_MAX_COUNT = 3;
+
+/** 업체 연락처 링크 최대 개수 */
+export const PROVIDER_CONTACT_LINKS_MAX_COUNT = 3;
+
+/** 업체 한줄 소개 최대 길이 */
+export const PROVIDER_INTRO_SHORT_MAX_LENGTH = 40;
