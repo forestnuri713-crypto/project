@@ -7,6 +7,7 @@ import { Roles } from '../auth/roles.decorator';
 import { AttendanceService } from './attendance.service';
 import { MarkAttendanceDto } from './dto/mark-attendance.dto';
 import { VerifyQrDto } from './dto/verify-qr.dto';
+import { AutoCheckinDto } from './dto/auto-checkin.dto';
 
 @ApiTags('Attendance')
 @Controller('attendance')
@@ -20,6 +21,14 @@ export class AttendanceController {
   @ApiOperation({ summary: '수동 출석 체크' })
   markAttendance(@Request() req: { user: { id: string } }, @Body() dto: MarkAttendanceDto) {
     return this.attendanceService.markAttendance(req.user.id, dto);
+  }
+
+  @Post('auto-checkin')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '위치+시간 기반 자동 출석 체크' })
+  autoCheckin(@Request() req: { user: { id: string } }, @Body() dto: AutoCheckinDto) {
+    return this.attendanceService.autoCheckin(req.user.id, dto);
   }
 
   @Get('qr/:reservationId')

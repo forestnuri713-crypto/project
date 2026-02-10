@@ -46,11 +46,17 @@ export const NOTIFICATION_COST_PER_MESSAGE = 15;
 /** B2B 기본 수수료율 (5%) */
 export const DEFAULT_B2B_COMMISSION_RATE = 0.05;
 
-/** 정산 크론 표현식: 매주 수요일 02:00 */
-export const SETTLEMENT_CRON_EXPRESSION = '0 2 * * 3';
+/** 정산 크론 표현식: 매주 목요일 02:00 */
+export const SETTLEMENT_CRON_EXPRESSION = '0 2 * * 4';
 
 /** 정산 분산 락 키 접두사 */
 export const SETTLEMENT_LOCK_KEY_PREFIX = 'settlement:lock:';
 
 /** 정산 분산 락 TTL (밀리초) - 5분 */
 export const SETTLEMENT_LOCK_TTL_MS = 5 * 60 * 1000;
+
+/** 자동 출석 체크 반경 (미터) */
+export const AUTO_CHECKIN_RADIUS_METERS = 100;
+
+/** 자동 출석 체크 시간 범위 (분) — 프로그램 시작 시간 전후 */
+export const AUTO_CHECKIN_TIME_WINDOW_MINUTES = 30;

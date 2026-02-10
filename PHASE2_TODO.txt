@@ -1,8 +1,8 @@
 ================================================================================
 숲똑 (SoopTalk) — 전체 프로젝트 컨텍스트 + Phase 별 작업 현황
 ================================================================================
-최종 업데이트: 2026-02-09
-현재 상태: Phase 4 완료 (백엔드), Phase 5 미착수 (어드민 프론트엔드)
+최종 업데이트: 2026-02-10
+현재 상태: Phase 4 완료 + 4가지 수정 적용, Phase 5 미착수 (어드민 프론트엔드)
 빌드 상태: pnpm run build 성공 (shared, server, admin, mobile 전체)
 
 ################################################################################
@@ -25,12 +25,12 @@
   - Infra: AWS (EC2, RDS, Lambda)
 
 핵심 데이터 모델 (Phase 4 완료 기준):
-  - User: id, email, role, phone_number, fcm_token + programs/reservations/settlements 관계
+  - User: id, email, role, phone_number, fcm_token, message_cash_balance + programs/reservations/settlements 관계
   - Program: id, instructor_id, title, description, location(geo), price, max_capacity, min_age, schedule_at, approval_status, rejection_reason, is_b2b
   - Reservation: id, user_id, program_id, status, participant_count, total_price + payment/attendance 관계
   - Gallery: id, program_id, image_key, thumbnail_key, uploaded_by
   - Payment: id, reservation_id(1:1), method, portone_payment_id, amount, status, paid_at, refunded_amount, refunded_at
-  - Attendance: id, reservation_id(1:1), status, qr_code, checked_at, checked_by
+  - Attendance: id, reservation_id(1:1), status, qr_code, checked_at, checked_by, checkin_latitude?, checkin_longitude?
   - Notification: id, user_id, type, title, body, is_read, data
   - Settlement: id, instructor_id, period_start, period_end, gross_amount, refund_amount, platform_fee, notification_cost, b2b_commission, net_amount, status, paid_at, memo
 
@@ -44,7 +44,7 @@
 
 환불 정책: 2일 전 100%, 1일 전 50%, 당일 환불 불가
 동시성: Redis 분산 락 (SET NX PX + Lua release)
-정산 수수료: 플랫폼 10%, 알림톡 건당 15원, B2B 별도 5%
+정산 수수료: 플랫폼 10%, 알림톡 건당 15원 (선충전 캐시 방식), B2B 별도 5%
 
 ################################################################################
 # PART 2: Phase 0 완료 현황 — 프로젝트 초기 세팅
@@ -94,8 +94,8 @@ Phase 1에서 구현 완료된 것:
 
 [인증 (AuthModule)]
   - JWT 기반 인증 (access token)
-  - 카카오 OAuth2 로그인
-  - 로컬 회원가입 (bcrypt 비밀번호 해싱)
+  - 카카오 OAuth2 로그인 (100% 카카오, 로컬 회원가입/로그인 제거)
+  - 첫 가입 시 role 선택 가능 (KakaoLoginDto.role?)
   - Role 기반 가드 (PARENT, INSTRUCTOR, ADMIN)
 
 [프로그램 관리 (ProgramsModule)]
@@ -234,7 +234,7 @@ Phase 3 Step별 완료 내역:
 ################################################################################
 
 Phase 4 결정 사항:
-  정산 주기: 매주 수요일 02:00 (전주 월~일 자동 정산)
+  정산 주기: 매주 목요일 02:00 (전주 월~일 자동 정산)
   수수료: 플랫폼 10%, 알림톡 건당 15원, B2B 별도 5%
   프로그램 검수: ADMIN 승인/거절, 승인된 프로그램만 부모에게 노출
   프론트엔드: Phase 5로 분리 (이번 Phase는 백엔드 API만)
@@ -283,7 +283,7 @@ Phase 4 Step별 완료 내역:
 
   Step 6: CronModule 확장                                           [완료]
     - cron.module.ts: SettlementsModule import 추가
-    - @Cron('0 2 * * 3'): 매주 수요일 02:00 자동 정산
+    - @Cron('0 2 * * 4'): 매주 목요일 02:00 자동 정산
     - Redis 분산 락(SETTLEMENT_LOCK_KEY_PREFIX + TTL 5분)으로 중복 방지
     - 전주 월~일 기간 계산 → settlementsService.generateSettlements() 호출
 
@@ -400,10 +400,8 @@ packages/shared/src/
 # PART 8: 전체 API 엔드포인트 (Phase 4 완료 기준, 41개)
 ################################################################################
 
-인증 (3개):
-  POST /auth/register              — 로컬 회원가입
-  POST /auth/login                 — 로컬 로그인 (JWT 발급)
-  POST /auth/kakao                 — 카카오 OAuth 로그인
+인증 (1개):
+  POST /auth/kakao                 — 카카오 로그인 (유일한 인증, 첫 가입 시 role 지정 가능)
 
 프로그램 (5개):
   GET  /programs                   — 프로그램 검색/조회 (Public, 승인된 것만)
@@ -422,8 +420,9 @@ packages/shared/src/
   POST /payments/prepare           — 결제 세션 생성 (JWT)
   POST /payments/webhook           — PortOne 웹훅 수신
 
-출석 (3개):
+출석 (4개):
   POST /attendance/check           — 수동 출석 체크 (INSTRUCTOR)
+  POST /attendance/auto-checkin    — 위치+시간 기반 자동 출석 체크 (JWT, ≤100m, ±30분)
   GET  /attendance/qr/:reservationId — QR 코드 조회 (JWT)
   POST /attendance/qr/verify       — QR 스캔 출석 확인 (INSTRUCTOR)
 
@@ -455,10 +454,11 @@ packages/shared/src/
   PATCH  /admin/settlements/:id    — 정산 메모 수정
   GET    /admin/users              — 사용자 목록 (역할/검색 필터, 페이지네이션)
   PATCH  /admin/users/:id/role     — 사용자 역할 변경
+  POST   /admin/users/:id/charge-cash — 사용자 알림 캐시 충전
 
 스케줄링 (2개):
   CronJob @EVERY_HOUR              — 활동 24시간 전 알림 자동 발송
-  CronJob @0 2 * * 3               — 매주 수요일 02:00 주간 정산 자동 생성 (Redis 분산 락)
+  CronJob @0 2 * * 4               — 매주 목요일 02:00 주간 정산 자동 생성 (Redis 분산 락)
 
 환경변수 (.env.example):
   DATABASE_URL, PORT, JWT_SECRET, KAKAO_REST_API_KEY,

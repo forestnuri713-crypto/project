@@ -9,16 +9,16 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
-  password?: string;
   kakaoId?: string;
   profileImageUrl?: string;
   phoneNumber: string;
   fcmToken?: string;
+  messageCashBalance: number;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export interface AuthResponse {
   accessToken: string;
-  user: Omit<User, 'password'>;
+  user: User;
 }

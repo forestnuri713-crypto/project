@@ -6,6 +6,7 @@ import { AdminQueryProgramsDto } from './dto/admin-query-programs.dto';
 import { RejectProgramDto } from './dto/reject-program.dto';
 import { ChangeRoleDto } from './dto/change-role.dto';
 import { AdminQueryUsersDto } from './dto/admin-query-users.dto';
+import { ChargeCashDto } from './dto/charge-cash.dto';
 
 @Injectable()
 export class AdminService {
@@ -190,5 +191,28 @@ export class AdminService {
         role: true,
       },
     });
+  }
+
+  async chargeCash(userId: string, dto: ChargeCashDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) {
+      throw new NotFoundException('사용자를 찾을 수 없습니다');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        messageCashBalance: { increment: dto.amount },
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        messageCashBalance: true,
+      },
+    });
+
+    return updated;
   }
 }

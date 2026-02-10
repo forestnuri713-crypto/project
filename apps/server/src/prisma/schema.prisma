@@ -59,17 +59,17 @@ enum SettlementStatus {
 }
 
 model User {
-  id              String   @id @default(uuid())
-  email           String   @unique
-  name            String
-  role            UserRole
-  password        String?
-  kakaoId         String?  @unique @map("kakao_id")
-  profileImageUrl String?  @map("profile_image_url")
-  phoneNumber     String   @map("phone_number")
-  fcmToken        String?  @map("fcm_token")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id                 String   @id @default(uuid())
+  email              String   @unique
+  name               String
+  role               UserRole
+  kakaoId            String?  @unique @map("kakao_id")
+  profileImageUrl    String?  @map("profile_image_url")
+  phoneNumber        String   @map("phone_number")
+  fcmToken           String?  @map("fcm_token")
+  messageCashBalance Int      @default(0) @map("message_cash_balance")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   programs           Program[]
   reservations       Reservation[]
@@ -144,14 +144,16 @@ model Payment {
 }
 
 model Attendance {
-  id            String           @id @default(uuid())
-  reservationId String           @unique @map("reservation_id")
-  status        AttendanceStatus @default(NO_SHOW)
-  qrCode        String           @unique @map("qr_code")
-  checkedAt     DateTime?        @map("checked_at")
-  checkedBy     String?          @map("checked_by")
-  createdAt     DateTime         @default(now()) @map("created_at")
-  updatedAt     DateTime         @updatedAt @map("updated_at")
+  id               String           @id @default(uuid())
+  reservationId    String           @unique @map("reservation_id")
+  status           AttendanceStatus @default(NO_SHOW)
+  qrCode           String           @unique @map("qr_code")
+  checkedAt        DateTime?        @map("checked_at")
+  checkedBy        String?          @map("checked_by")
+  checkinLatitude  Float?           @map("checkin_latitude")
+  checkinLongitude Float?           @map("checkin_longitude")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
 
   reservation Reservation @relation(fields: [reservationId], references: [id])
   checker     User?       @relation("AttendanceChecker", fields: [checkedBy], references: [id])

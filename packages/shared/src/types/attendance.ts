@@ -10,6 +10,8 @@ export interface Attendance {
   qrCode: string;
   checkedAt?: Date;
   checkedBy?: string;
+  checkinLatitude?: number;
+  checkinLongitude?: number;
   createdAt: Date;
   updatedAt: Date;
 }

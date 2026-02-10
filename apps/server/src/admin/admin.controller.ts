@@ -19,6 +19,7 @@ import { AdminQueryProgramsDto } from './dto/admin-query-programs.dto';
 import { RejectProgramDto } from './dto/reject-program.dto';
 import { ChangeRoleDto } from './dto/change-role.dto';
 import { AdminQueryUsersDto } from './dto/admin-query-users.dto';
+import { ChargeCashDto } from './dto/charge-cash.dto';
 import { QuerySettlementDto } from '../settlements/dto/query-settlement.dto';
 import { GenerateSettlementDto } from '../settlements/dto/generate-settlement.dto';
 import { UpdateSettlementDto } from '../settlements/dto/update-settlement.dto';
@@ -112,5 +113,11 @@ export class AdminController {
   @ApiOperation({ summary: '사용자 역할 변경' })
   changeUserRole(@Param('id') id: string, @Body() dto: ChangeRoleDto) {
     return this.adminService.changeUserRole(id, dto);
+  }
+
+  @Post('users/:id/charge-cash')
+  @ApiOperation({ summary: '사용자 알림 캐시 충전' })
+  chargeCash(@Param('id') id: string, @Body() dto: ChargeCashDto) {
+    return this.adminService.chargeCash(id, dto);
   }
 }

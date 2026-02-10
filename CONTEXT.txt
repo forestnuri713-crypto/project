@@ -1,8 +1,8 @@
 ================================================================================
 숲똑 (SoopTalk) — 전체 프로젝트 컨텍스트 + 다음 작업 TODO
 ================================================================================
-최종 업데이트: 2026-02-09
-현재 상태: Phase 4 완료 (백엔드), Phase 5 미착수 (어드민 프론트엔드)
+최종 업데이트: 2026-02-10
+현재 상태: Phase 4 완료 + 4가지 수정 적용, Phase 5 미착수 (어드민 프론트엔드)
 빌드 상태: pnpm run build 성공 (shared, server, admin, mobile 전체)
 
 ################################################################################
@@ -49,7 +49,7 @@
   - ESLint + Prettier 통합
 
 [Phase 1 — Auth + 프로그램 + 예약 MVP]
-  - AuthModule: JWT 인증, 카카오 OAuth, 로컬 회원가입, Role 가드
+  - AuthModule: JWT 인증, 카카오 OAuth (100% 카카오 로그인), Role 가드
   - ProgramsModule: CRUD (강사가 활동 등록/수정)
   - ReservationsModule: 예약 생성/조회/취소 (당시 즉시 CONFIRMED)
   - Swagger 문서 (/api-docs)
@@ -183,7 +183,7 @@ apps/server/src/
   auth/
     auth.module.ts, auth.controller.ts, auth.service.ts
     jwt.strategy.ts, jwt-auth.guard.ts, roles.guard.ts, roles.decorator.ts
-    dto/ (register, login, kakao-login)
+    dto/ (kakao-login)
   programs/
     programs.module.ts, programs.controller.ts, programs.service.ts
     dto/ (create-program, update-program, query-program)
@@ -198,7 +198,7 @@ apps/server/src/
   attendance/
     attendance.module.ts
     attendance.controller.ts, attendance.service.ts
-    dto/ (mark-attendance, verify-qr)
+    dto/ (mark-attendance, verify-qr, auto-checkin)
   notifications/
     notifications.module.ts (exports: NotificationsService)
     notifications.controller.ts, notifications.service.ts
@@ -217,9 +217,9 @@ apps/server/src/
     dto/ (query-settlement, generate-settlement, update-settlement)
   admin/
     admin.module.ts (imports: NotificationsModule, SettlementsModule)
-    admin.controller.ts — 12개 어드민 엔드포인트 (ADMIN)
-    admin.service.ts — 대시보드/프로그램 검수/사용자 관리
-    dto/ (admin-query-programs, reject-program, change-role, admin-query-users)
+    admin.controller.ts — 13개 어드민 엔드포인트 (ADMIN)
+    admin.service.ts — 대시보드/프로그램 검수/사용자 관리/캐시 충전
+    dto/ (admin-query-programs, reject-program, change-role, admin-query-users, charge-cash)
 
 packages/shared/src/
   index.ts                — 모든 타입/상수 re-export
@@ -229,7 +229,8 @@ packages/shared/src/
                             THUMBNAIL_MAX_WIDTH, THUMBNAIL_QUALITY,
                             PLATFORM_FEE_RATE, NOTIFICATION_COST_PER_MESSAGE,
                             DEFAULT_B2B_COMMISSION_RATE, SETTLEMENT_CRON_EXPRESSION,
-                            SETTLEMENT_LOCK_KEY_PREFIX, SETTLEMENT_LOCK_TTL_MS
+                            SETTLEMENT_LOCK_KEY_PREFIX, SETTLEMENT_LOCK_TTL_MS,
+                            AUTO_CHECKIN_RADIUS_METERS, AUTO_CHECKIN_TIME_WINDOW_MINUTES
   types/
     user.ts               — UserRole enum (PARENT, INSTRUCTOR, ADMIN), User, AuthResponse
     program.ts            — ApprovalStatus enum (PENDING_REVIEW, APPROVED, REJECTED), Program interface
@@ -247,7 +248,7 @@ packages/shared/src/
 enum (8개): UserRole, ReservationStatus, PaymentMethod, PaymentStatus, AttendanceStatus, NotificationType, ApprovalStatus, SettlementStatus
 
 User:
-  id, email(unique), name, role, password?, kakaoId?(unique), profileImageUrl?, phoneNumber, fcmToken?
+  id, email(unique), name, role, kakaoId?(unique), profileImageUrl?, phoneNumber, fcmToken?, messageCashBalance(default 0)
   relations: programs[], reservations[], checkedAttendances[], notifications[], uploadedPhotos[], settlements[]
 
 Program:
@@ -265,7 +266,7 @@ Payment:
   relations: reservation(Reservation)
 
 Attendance:
-  id, reservationId(unique), status(default NO_SHOW), qrCode(unique), checkedAt?, checkedBy?
+  id, reservationId(unique), status(default NO_SHOW), qrCode(unique), checkedAt?, checkedBy?, checkinLatitude?, checkinLongitude?
   relations: reservation(Reservation), checker(User?)
 
 Gallery:
@@ -286,10 +287,8 @@ Settlement:
 # PART 8: 전체 API 엔드포인트 (41개)
 ################################################################################
 
-인증 (3개):
-  POST /auth/register              — 로컬 회원가입
-  POST /auth/login                 — 로컬 로그인 (JWT 발급)
-  POST /auth/kakao                 — 카카오 OAuth 로그인
+인증 (1개):
+  POST /auth/kakao                 — 카카오 로그인 (유일한 인증, 첫 가입 시 role 지정 가능)
 
 프로그램 (5개):
   GET  /programs                   — 프로그램 검색/조회 (Public, 승인된 것만)
@@ -308,8 +307,9 @@ Settlement:
   POST /payments/prepare           — 결제 세션 생성 (JWT)
   POST /payments/webhook           — PortOne 웹훅 수신
 
-출석 (3개):
+출석 (4개):
   POST /attendance/check           — 수동 출석 체크 (INSTRUCTOR)
+  POST /attendance/auto-checkin    — 위치+시간 기반 자동 출석 체크 (JWT, ≤100m, ±30분)
   GET  /attendance/qr/:reservationId — QR 코드 조회 (JWT)
   POST /attendance/qr/verify       — QR 스캔 출석 확인 (INSTRUCTOR)
 
@@ -328,7 +328,7 @@ Settlement:
 정산 — 강사 (1개):
   GET  /settlements/my             — 강사 본인 정산 조회 (INSTRUCTOR)
 
-어드민 (12개, 모두 JWT + ADMIN):
+어드민 (13개, 모두 JWT + ADMIN):
   GET    /admin/dashboard/stats    — 대시보드 통계 (사용자/예약/매출/대기)
   GET    /admin/programs           — 프로그램 목록 (approvalStatus 필터)
   PATCH  /admin/programs/:id/approve — 프로그램 승인 + 강사 FCM 알림
@@ -341,10 +341,11 @@ Settlement:
   PATCH  /admin/settlements/:id    — 정산 메모 수정
   GET    /admin/users              — 사용자 목록 (역할/검색 필터, 페이지네이션)
   PATCH  /admin/users/:id/role     — 사용자 역할 변경
+  POST   /admin/users/:id/charge-cash — 사용자 알림 캐시 충전
 
 스케줄링 (2개):
   CronJob @EVERY_HOUR              — 활동 24시간 전 알림 자동 발송
-  CronJob @0 2 * * 3               — 매주 수요일 02:00 주간 정산 자동 생성 (Redis 분산 락)
+  CronJob @0 2 * * 4               — 매주 목요일 02:00 주간 정산 자동 생성 (Redis 분산 락)
 
 ################################################################################
 # PART 9: 환경변수 (.env.example)

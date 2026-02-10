@@ -2,7 +2,6 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { Prisma } from '@prisma/client';
 import {
   PLATFORM_FEE_RATE,
-  NOTIFICATION_COST_PER_MESSAGE,
   DEFAULT_B2B_COMMISSION_RATE,
 } from '@sooptalk/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -99,21 +98,8 @@ export class SettlementsService {
     });
     const refundAmount = refundResult._sum.refundedAmount ?? 0;
 
-    // Notification cost: count of notifications for instructor's programs in period
-    const notificationCount = await this.prisma.notification.count({
-      where: {
-        createdAt: { gte: periodStart, lte: periodEnd },
-        user: {
-          reservations: {
-            some: {
-              program: { instructorId },
-            },
-          },
-        },
-        type: { in: ['PRE_ACTIVITY', 'GALLERY_UPLOADED'] },
-      },
-    });
-    const notificationCost = notificationCount * NOTIFICATION_COST_PER_MESSAGE;
+    // Notification cost: 0 (prepaid cash system — deducted at send time, no double deduction in settlement)
+    const notificationCost = 0;
 
     // B2B commission: sum of B2B program payments * 5%
     const b2bResult = await this.prisma.payment.aggregate({

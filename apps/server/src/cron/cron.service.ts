@@ -67,13 +67,13 @@ export class CronService {
     this.logger.log('사전 활동 알림 크론잡 완료');
   }
 
-  @Cron('0 2 * * 3')
+  @Cron('0 2 * * 4')
   async handleWeeklySettlement() {
     this.logger.log('주간 정산 크론잡 시작');
 
     // Calculate previous week: Monday 00:00 ~ Sunday 23:59:59.999
     const now = new Date();
-    const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ..., 3=Wed
+    const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ..., 4=Thu
     const lastMonday = new Date(now);
     lastMonday.setDate(now.getDate() - dayOfWeek - 6); // Previous Monday
     lastMonday.setHours(0, 0, 0, 0);
