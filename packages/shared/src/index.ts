@@ -21,6 +21,9 @@ export type { Notification } from './types/notification';
 export { SettlementStatus } from './types/settlement';
 export type { Settlement } from './types/settlement';
 
+export { ReviewStatus } from './types/review';
+export type { Review } from './types/review';
+
 export { ProviderRole, ProviderMemberStatus } from './types/provider';
 export type {
   Provider,

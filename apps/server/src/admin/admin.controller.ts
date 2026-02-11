@@ -33,6 +33,8 @@ import { AdminQueryProvidersDto } from './dto/admin-query-providers.dto';
 import { AdminUpsertProfileDto } from './dto/admin-upsert-profile.dto';
 import { PresignCoverDto } from '../providers/dto/presign-cover.dto';
 import { PublishProfileDto } from '../providers/dto/publish-profile.dto';
+import { AdminQueryReviewsDto } from './dto/admin-query-reviews.dto';
+import { UpdateReviewStatusDto } from './dto/update-review-status.dto';
 
 @ApiTags('Admin')
 @ApiBearerAuth()
@@ -199,5 +201,19 @@ export class AdminController {
   @ApiOperation({ summary: '업체 프로필 게시/비게시 (관리자)' })
   publishProviderProfile(@Param('id') id: string, @Body() dto: PublishProfileDto) {
     return this.adminService.publishProviderProfile(id, dto);
+  }
+
+  // ─── Reviews ──────────────────────────────────────
+
+  @Get('reviews')
+  @ApiOperation({ summary: '리뷰 목록 (필터/페이지네이션)' })
+  findReviews(@Query() query: AdminQueryReviewsDto) {
+    return this.adminService.findReviews(query);
+  }
+
+  @Patch('reviews/:id/status')
+  @ApiOperation({ summary: '리뷰 상태 변경 (VISIBLE/HIDDEN)' })
+  setReviewStatus(@Param('id') id: string, @Body() dto: UpdateReviewStatusDto) {
+    return this.adminService.setReviewStatus(id, dto.status);
   }
 }

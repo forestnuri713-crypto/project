@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: '/settlements', label: '정산' },
   { href: '/users', label: '유저 관리' },
   { href: '/providers', label: 'Provider' },
+  { href: '/reviews', label: '리뷰 관리' },
 ];
 
 export default function Sidebar() {

@@ -79,6 +79,11 @@ enum ProviderMemberStatus {
   SUSPENDED
 }
 
+enum ReviewStatus {
+  VISIBLE
+  HIDDEN
+}
+
 model User {
   id                 String   @id @default(uuid())
   email              String   @unique
@@ -102,6 +107,7 @@ model User {
   uploadedPhotos     Gallery[]     @relation("GalleryUploader")
   settlements        Settlement[]
   providerMemberships ProviderMember[]
+  reviews              Review[]
 
   @@map("users")
 }
@@ -132,6 +138,7 @@ model Program {
   provider     Provider?     @relation(fields: [providerId], references: [id])
   reservations Reservation[]
   gallery      Gallery[]
+  reviews      Review[]
 
   @@index([approvalStatus])
   @@map("programs")
@@ -151,6 +158,7 @@ model Reservation {
   program    Program     @relation(fields: [programId], references: [id])
   payment    Payment?
   attendance Attendance?
+  review     Review?
 
   @@map("reservations")
 }
@@ -292,4 +300,23 @@ model ProviderProfile {
   provider Provider @relation(fields: [providerId], references: [id])
 
   @@map("provider_profiles")
+}
+
+model Review {
+  id            String       @id @default(uuid())
+  programId     String       @map("program_id")
+  reservationId String       @unique @map("reservation_id")
+  parentUserId  String       @map("parent_user_id")
+  rating        Int
+  comment       String       @db.VarChar(300)
+  status        ReviewStatus @default(VISIBLE)
+  editedAt      DateTime?    @map("edited_at")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  program     Program     @relation(fields: [programId], references: [id])
+  reservation Reservation @relation(fields: [reservationId], references: [id])
+  parentUser  User        @relation(fields: [parentUserId], references: [id])
+
+  @@map("reviews")
 }

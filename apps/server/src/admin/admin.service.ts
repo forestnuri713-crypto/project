@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { StorageService } from '../storage/storage.service';
+import { AdminQueryReviewsDto } from './dto/admin-query-reviews.dto';
 import { AdminQueryProgramsDto } from './dto/admin-query-programs.dto';
 import { RejectProgramDto } from './dto/reject-program.dto';
 import { ChangeRoleDto } from './dto/change-role.dto';
@@ -532,6 +533,54 @@ export class AdminService {
     return this.prisma.providerProfile.update({
       where: { providerId },
       data: { isPublished: dto.isPublished },
+    });
+  }
+
+  // ─── Reviews ──────────────────────────────────────
+
+  async findReviews(query: AdminQueryReviewsDto) {
+    const where: Prisma.ReviewWhereInput = {};
+
+    if (query.status) {
+      where.status = query.status;
+    }
+
+    if (query.rating) {
+      where.rating = query.rating;
+    }
+
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+
+    const [items, total] = await Promise.all([
+      this.prisma.review.findMany({
+        where,
+        include: {
+          program: { select: { id: true, title: true } },
+          parentUser: { select: { id: true, name: true, email: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.review.count({ where }),
+    ]);
+
+    return { items, total, page, limit };
+  }
+
+  async setReviewStatus(reviewId: string, status: 'VISIBLE' | 'HIDDEN') {
+    const review = await this.prisma.review.findUnique({
+      where: { id: reviewId },
+    });
+
+    if (!review) {
+      throw new NotFoundException('리뷰를 찾을 수 없습니다');
+    }
+
+    return this.prisma.review.update({
+      where: { id: reviewId },
+      data: { status },
     });
   }
 }
