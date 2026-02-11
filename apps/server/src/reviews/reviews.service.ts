@@ -1,11 +1,12 @@
 import {
   BadRequestException,
-  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { BusinessException } from '../common/exceptions/business.exception';
+import { canWriteReview } from '../domain/reservation.util';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
 
@@ -27,11 +28,12 @@ export class ReviewsService {
       throw new ForbiddenException('본인의 예약에만 리뷰를 작성할 수 있습니다');
     }
 
-    const isCompleted = reservation.status === 'COMPLETED';
-    const isAttended = reservation.attendance?.status === 'ATTENDED';
-
-    if (!isCompleted && !isAttended) {
-      throw new BadRequestException('완료되었거나 출석한 예약에만 리뷰를 작성할 수 있습니다');
+    if (!canWriteReview(reservation, reservation.attendance)) {
+      throw new BusinessException(
+        'REVIEW_NOT_ALLOWED',
+        '완료되었거나 출석한 예약에만 리뷰를 작성할 수 있습니다',
+        400,
+      );
     }
 
     const existing = await this.prisma.review.findUnique({
@@ -39,7 +41,11 @@ export class ReviewsService {
     });
 
     if (existing) {
-      throw new ConflictException('이미 리뷰를 작성한 예약입니다');
+      throw new BusinessException(
+        'REVIEW_ALREADY_EXISTS',
+        '이미 리뷰를 작성한 예약입니다',
+        409,
+      );
     }
 
     return this.prisma.review.create({

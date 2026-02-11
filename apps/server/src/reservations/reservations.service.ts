@@ -10,6 +10,7 @@ import { REFUND_POLICY, REDIS_LOCK_TTL_MS } from '@sooptalk/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { PaymentsService } from '../payments/payments.service';
+import { isTerminalReservationStatus } from '../domain/reservation.util';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { QueryReservationDto } from './dto/query-reservation.dto';
 
@@ -128,12 +129,12 @@ export class ReservationsService {
       throw new ForbiddenException('본인의 예약만 취소할 수 있습니다');
     }
 
-    if (reservation.status === 'CANCELLED') {
-      throw new BadRequestException('이미 취소된 예약입니다');
-    }
-
-    if (reservation.status === 'COMPLETED') {
-      throw new BadRequestException('완료된 예약은 취소할 수 없습니다');
+    if (isTerminalReservationStatus(reservation.status)) {
+      throw new BadRequestException(
+        reservation.status === 'CANCELLED'
+          ? '이미 취소된 예약입니다'
+          : '완료된 예약은 취소할 수 없습니다',
+      );
     }
 
     const now = new Date();

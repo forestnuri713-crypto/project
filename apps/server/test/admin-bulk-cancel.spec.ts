@@ -5,10 +5,7 @@ import {
   StartJobIdempotentResult,
   StartJobResult,
 } from '../src/admin/admin-bulk-cancel.service';
-import {
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BusinessException } from '../src/common/exceptions/business.exception';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { PaymentsService } from '../src/payments/payments.service';
 import { NotificationsService } from '../src/notifications/notifications.service';
@@ -98,15 +95,17 @@ describe('AdminBulkCancelService', () => {
   });
 
   describe('createJob', () => {
-    it('should throw 404 when program not found', async () => {
+    it('should throw BULK_CANCEL_JOB_NOT_FOUND when program not found', async () => {
       mockPrisma.program.findUnique.mockResolvedValue(null);
 
       await expect(
         service.createJob(programId, '우천 취소', adminUserId),
-      ).rejects.toThrow(NotFoundException);
+      ).rejects.toThrow(
+        expect.objectContaining({ code: 'BULK_CANCEL_JOB_NOT_FOUND' }),
+      );
     });
 
-    it('should throw 409 when a RUNNING job already exists', async () => {
+    it('should throw BULK_CANCEL_JOB_RUNNING when a RUNNING job already exists', async () => {
       mockPrisma.program.findUnique.mockResolvedValue({ id: programId });
       mockPrisma.bulkCancelJob.findFirst.mockResolvedValue({
         id: 'existing-job',
@@ -115,7 +114,9 @@ describe('AdminBulkCancelService', () => {
 
       await expect(
         service.createJob(programId, '우천 취소', adminUserId),
-      ).rejects.toThrow(ConflictException);
+      ).rejects.toThrow(
+        expect.objectContaining({ code: 'BULK_CANCEL_JOB_RUNNING' }),
+      );
     });
 
     it('should return dry run result without DB changes', async () => {
@@ -180,15 +181,15 @@ describe('AdminBulkCancelService', () => {
   });
 
   describe('startJob', () => {
-    it('should throw 404 for non-existent job', async () => {
+    it('should throw BULK_CANCEL_JOB_NOT_FOUND for non-existent job', async () => {
       mockPrisma.bulkCancelJob.findUnique.mockResolvedValue(null);
 
       await expect(service.startJob('bad-id')).rejects.toThrow(
-        NotFoundException,
+        expect.objectContaining({ code: 'BULK_CANCEL_JOB_NOT_FOUND' }),
       );
     });
 
-    it('should throw 409 for already COMPLETED job', async () => {
+    it('should throw BULK_CANCEL_JOB_COMPLETED for already COMPLETED job', async () => {
       mockPrisma.bulkCancelJob.findUnique.mockResolvedValue({
         id: 'job-1',
         status: 'COMPLETED',
@@ -196,7 +197,7 @@ describe('AdminBulkCancelService', () => {
       });
 
       await expect(service.startJob('job-1')).rejects.toThrow(
-        ConflictException,
+        expect.objectContaining({ code: 'BULK_CANCEL_JOB_COMPLETED' }),
       );
     });
 
@@ -403,11 +404,11 @@ describe('AdminBulkCancelService', () => {
       expect(result.total).toBe(1);
     });
 
-    it('should throw 404 for non-existent job', async () => {
+    it('should throw BULK_CANCEL_JOB_NOT_FOUND for non-existent job', async () => {
       mockPrisma.bulkCancelJob.findUnique.mockResolvedValue(null);
 
       await expect(service.getJobItems('bad-id')).rejects.toThrow(
-        NotFoundException,
+        expect.objectContaining({ code: 'BULK_CANCEL_JOB_NOT_FOUND' }),
       );
     });
   });

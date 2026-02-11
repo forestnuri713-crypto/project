@@ -1,8 +1,6 @@
 import {
-  ConflictException,
   Injectable,
   Logger,
-  NotFoundException,
 } from '@nestjs/common';
 import {
   BulkCancelItemResult,
@@ -11,13 +9,16 @@ import {
   BulkCancelJobStatus,
 } from '@prisma/client';
 import { REFUND_POLICY } from '@sooptalk/shared';
+import { BusinessException } from '../common/exceptions/business.exception';
+import { shouldSkipBulkCancel } from '../domain/reservation.util';
+import { BulkCancelMode, getRefundMode } from '../domain/refund.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaymentsService } from '../payments/payments.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
 // ─── Return Types ─────────────────────────────────────
 
-export type BulkCancelMode = 'A_PG_REFUND' | 'B_LEDGER_ONLY';
+export { BulkCancelMode } from '../domain/refund.util';
 
 export interface CreateJobDryRunResult {
   dryRun: true;
@@ -78,13 +79,10 @@ export class AdminBulkCancelService {
   ) {}
 
   private determineMode(): BulkCancelMode {
-    if (
-      this.paymentsService &&
-      typeof this.paymentsService.processRefund === 'function'
-    ) {
-      return 'A_PG_REFUND';
-    }
-    return 'B_LEDGER_ONLY';
+    const paymentsServicePresent =
+      !!this.paymentsService &&
+      typeof this.paymentsService.processRefund === 'function';
+    return getRefundMode(paymentsServicePresent);
   }
 
   async createJob(
@@ -115,15 +113,21 @@ export class AdminBulkCancelService {
       where: { id: sessionId },
     });
     if (!program) {
-      throw new NotFoundException('프로그램을 찾을 수 없습니다');
+      throw new BusinessException(
+        'BULK_CANCEL_JOB_NOT_FOUND',
+        '프로그램을 찾을 수 없습니다',
+        404,
+      );
     }
 
     const runningJob = await this.prisma.bulkCancelJob.findFirst({
       where: { sessionId, status: 'RUNNING' },
     });
     if (runningJob) {
-      throw new ConflictException(
+      throw new BusinessException(
+        'BULK_CANCEL_JOB_RUNNING',
         '해당 프로그램에 이미 실행 중인 일괄 취소 작업이 있습니다',
+        409,
       );
     }
 
@@ -193,7 +197,11 @@ export class AdminBulkCancelService {
     });
 
     if (!job) {
-      throw new NotFoundException('일괄 취소 작업을 찾을 수 없습니다');
+      throw new BusinessException(
+        'BULK_CANCEL_JOB_NOT_FOUND',
+        '일괄 취소 작업을 찾을 수 없습니다',
+        404,
+      );
     }
 
     if (
@@ -201,7 +209,11 @@ export class AdminBulkCancelService {
       job.status === 'COMPLETED_WITH_ERRORS' ||
       job.status === 'FAILED'
     ) {
-      throw new ConflictException('이미 완료된 작업입니다');
+      throw new BusinessException(
+        'BULK_CANCEL_JOB_COMPLETED',
+        '이미 완료된 작업입니다',
+        409,
+      );
     }
 
     if (job.status === 'RUNNING') {
@@ -252,7 +264,7 @@ export class AdminBulkCancelService {
 
     const reservation = item.reservation;
 
-    if (reservation.status === 'CANCELLED') {
+    if (shouldSkipBulkCancel(reservation)) {
       await this.prisma.bulkCancelJobItem.update({
         where: { id: item.id },
         data: { result: 'SKIPPED', attemptedAt: new Date() },
@@ -370,7 +382,11 @@ export class AdminBulkCancelService {
     });
 
     if (!job) {
-      throw new NotFoundException('일괄 취소 작업을 찾을 수 없습니다');
+      throw new BusinessException(
+        'BULK_CANCEL_JOB_NOT_FOUND',
+        '일괄 취소 작업을 찾을 수 없습니다',
+        404,
+      );
     }
 
     return job;
@@ -386,7 +402,11 @@ export class AdminBulkCancelService {
       where: { id: jobId },
     });
     if (!job) {
-      throw new NotFoundException('일괄 취소 작업을 찾을 수 없습니다');
+      throw new BusinessException(
+        'BULK_CANCEL_JOB_NOT_FOUND',
+        '일괄 취소 작업을 찾을 수 없습니다',
+        404,
+      );
     }
 
     const where: { jobId: string; result?: BulkCancelItemResult } = { jobId };
@@ -437,7 +457,11 @@ export class AdminBulkCancelService {
     });
 
     if (!job) {
-      throw new NotFoundException('일괄 취소 작업을 찾을 수 없습니다');
+      throw new BusinessException(
+        'BULK_CANCEL_JOB_NOT_FOUND',
+        '일괄 취소 작업을 찾을 수 없습니다',
+        404,
+      );
     }
 
     if (job.items.length === 0) {

@@ -5,7 +5,12 @@
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\""
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "test:server": "pnpm --filter @sooptalk/server test",
+    "test:all": "pnpm -r run test",
+    "typecheck:server": "pnpm --filter @sooptalk/server exec tsc --noEmit",
+    "typecheck:all": "pnpm -r exec tsc --noEmit",
+    "build:all": "turbo run build"
   },
   "devDependencies": {
     "eslint": "^8.57.0",

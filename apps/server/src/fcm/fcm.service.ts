@@ -43,7 +43,7 @@ export class FcmService implements OnModuleInit {
         data,
       });
     } catch (error) {
-      this.logger.error(`FCM 발송 실패: ${error}`);
+      this.logger.warn(`FCM 발송 실패: ${error}`);
     }
   }
 
@@ -62,7 +62,7 @@ export class FcmService implements OnModuleInit {
         data,
       });
     } catch (error) {
-      this.logger.error(`FCM 멀티캐스트 발송 실패: ${error}`);
+      this.logger.warn(`FCM 멀티캐스트 발송 실패: ${error}`);
     }
   }
 }

@@ -2,10 +2,10 @@ import { ReviewsService } from '../src/reviews/reviews.service';
 import { AdminService } from '../src/admin/admin.service';
 import {
   BadRequestException,
-  ConflictException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import { BusinessException } from '../src/common/exceptions/business.exception';
 
 describe('ReviewsService', () => {
   let service: ReviewsService;
@@ -87,7 +87,9 @@ describe('ReviewsService', () => {
         attendance: null,
       });
 
-      await expect(service.createReview(userId, dto)).rejects.toThrow(BadRequestException);
+      await expect(service.createReview(userId, dto)).rejects.toThrow(
+        expect.objectContaining({ code: 'REVIEW_NOT_ALLOWED' }),
+      );
     });
 
     it('should reject duplicate review (UNIQUE reservationId)', async () => {
@@ -100,7 +102,9 @@ describe('ReviewsService', () => {
       });
       mockPrisma.review.findUnique.mockResolvedValue({ id: 'existing-rev' });
 
-      await expect(service.createReview(userId, dto)).rejects.toThrow(ConflictException);
+      await expect(service.createReview(userId, dto)).rejects.toThrow(
+        expect.objectContaining({ code: 'REVIEW_ALREADY_EXISTS' }),
+      );
     });
 
     it('should reject review from non-owner', async () => {

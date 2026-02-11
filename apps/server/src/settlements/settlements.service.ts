@@ -57,7 +57,7 @@ export class SettlementsService {
           );
           continue;
         }
-        this.logger.error(
+        this.logger.warn(
           `정산 생성 실패: instructorId=${instructor.id}`,
           error instanceof Error ? error.stack : undefined,
         );
