@@ -1,7 +1,14 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { randomUUID } from 'crypto';
+import * as path from 'path';
+import {
+  PROVIDER_COVER_UPLOAD_URL_EXPIRES_IN,
+  GALLERY_SIGNED_URL_EXPIRES_IN,
+} from '@sooptalk/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { StorageService } from '../storage/storage.service';
 import { AdminQueryProgramsDto } from './dto/admin-query-programs.dto';
 import { RejectProgramDto } from './dto/reject-program.dto';
 import { ChangeRoleDto } from './dto/change-role.dto';
@@ -10,12 +17,19 @@ import { ChargeCashDto } from './dto/charge-cash.dto';
 import { AdminQueryInstructorsDto } from './dto/admin-query-instructors.dto';
 import { RejectInstructorDto } from './dto/reject-instructor.dto';
 import { UpdateCertificationsDto } from './dto/update-certifications.dto';
+import { CreateProviderDto } from './dto/create-provider.dto';
+import { UpdateProviderDto } from './dto/update-provider.dto';
+import { AdminQueryProvidersDto } from './dto/admin-query-providers.dto';
+import { AdminUpsertProfileDto } from './dto/admin-upsert-profile.dto';
+import { PresignCoverDto } from '../providers/dto/presign-cover.dto';
+import { PublishProfileDto } from '../providers/dto/publish-profile.dto';
 
 @Injectable()
 export class AdminService {
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
+    private storageService: StorageService,
   ) {}
 
   async getDashboardStats() {
@@ -354,5 +368,170 @@ export class AdminService {
     });
 
     return updated;
+  }
+
+  // ─── Providers ─────────────────────────────────────
+
+  async createProvider(dto: CreateProviderDto) {
+    return this.prisma.provider.create({
+      data: {
+        name: dto.name,
+        regionTags: dto.regionTags ?? [],
+      },
+    });
+  }
+
+  async findProviders(query: AdminQueryProvidersDto) {
+    const where: Prisma.ProviderWhereInput = {};
+
+    if (query.query) {
+      where.name = { contains: query.query, mode: 'insensitive' };
+    }
+
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+
+    const [items, total] = await Promise.all([
+      this.prisma.provider.findMany({
+        where,
+        include: {
+          profile: { select: { isPublished: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.provider.count({ where }),
+    ]);
+
+    return { items, total, page, pageSize };
+  }
+
+  async updateProvider(id: string, dto: UpdateProviderDto) {
+    const provider = await this.prisma.provider.findUnique({ where: { id } });
+    if (!provider) {
+      throw new NotFoundException('업체를 찾을 수 없습니다');
+    }
+
+    const data: Prisma.ProviderUpdateInput = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.regionTags !== undefined) data.regionTags = dto.regionTags;
+
+    return this.prisma.provider.update({ where: { id }, data });
+  }
+
+  async getProviderProfile(providerId: string) {
+    const provider = await this.prisma.provider.findUnique({
+      where: { id: providerId },
+    });
+    if (!provider) {
+      throw new NotFoundException('업체를 찾을 수 없습니다');
+    }
+
+    const profile = await this.prisma.providerProfile.findUnique({
+      where: { providerId },
+    });
+
+    if (!profile) {
+      return {
+        provider: { id: provider.id, name: provider.name, regionTags: provider.regionTags },
+        profile: {
+          displayName: provider.name,
+          introShort: null,
+          certificationsText: null,
+          storyText: null,
+          coverImageUrls: [],
+          contactLinks: [],
+          isPublished: false,
+        },
+      };
+    }
+
+    const coverImageKeys = profile.coverImageUrls as string[];
+    const coverImageUrls = await Promise.all(
+      coverImageKeys.map((key) =>
+        this.storageService.generateDownloadUrl(key, GALLERY_SIGNED_URL_EXPIRES_IN),
+      ),
+    );
+
+    return {
+      provider: { id: provider.id, name: provider.name, regionTags: provider.regionTags },
+      profile: {
+        displayName: profile.displayName,
+        introShort: profile.introShort,
+        certificationsText: profile.certificationsText,
+        storyText: profile.storyText,
+        coverImageUrls,
+        contactLinks: profile.contactLinks,
+        isPublished: profile.isPublished,
+      },
+    };
+  }
+
+  async upsertProviderProfile(providerId: string, dto: AdminUpsertProfileDto) {
+    const provider = await this.prisma.provider.findUnique({
+      where: { id: providerId },
+    });
+    if (!provider) {
+      throw new NotFoundException('업체를 찾을 수 없습니다');
+    }
+
+    const data = {
+      displayName: dto.displayName,
+      introShort: dto.introShort ?? null,
+      certificationsText: dto.certificationsText ?? null,
+      storyText: dto.storyText ?? null,
+      coverImageUrls: dto.coverImageUrls ?? [],
+      contactLinks: dto.contactLinks ?? [],
+    };
+
+    return this.prisma.providerProfile.upsert({
+      where: { providerId },
+      create: { providerId, ...data },
+      update: data,
+    });
+  }
+
+  async presignProviderCoverImages(providerId: string, dto: PresignCoverDto) {
+    const provider = await this.prisma.provider.findUnique({
+      where: { id: providerId },
+    });
+    if (!provider) {
+      throw new NotFoundException('업체를 찾을 수 없습니다');
+    }
+
+    const uploads = await Promise.all(
+      dto.files.map(async (file) => {
+        const ext = path.extname(file.filename);
+        const key = `provider-covers/${providerId}/${randomUUID()}${ext}`;
+        const uploadUrl = await this.storageService.generateUploadUrl(
+          key,
+          file.contentType,
+          PROVIDER_COVER_UPLOAD_URL_EXPIRES_IN,
+        );
+        return {
+          uploadUrl,
+          method: 'PUT',
+          headers: { 'Content-Type': file.contentType },
+          finalUrl: key,
+        };
+      }),
+    );
+
+    return { uploads };
+  }
+
+  async publishProviderProfile(providerId: string, dto: PublishProfileDto) {
+    const profile = await this.prisma.providerProfile.findUnique({
+      where: { providerId },
+    });
+    if (!profile) {
+      throw new NotFoundException('프로필을 먼저 생성해주세요');
+    }
+
+    return this.prisma.providerProfile.update({
+      where: { providerId },
+      data: { isPublished: dto.isPublished },
+    });
   }
 }

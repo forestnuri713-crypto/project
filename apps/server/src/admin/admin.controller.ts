@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -26,6 +27,12 @@ import { UpdateCertificationsDto } from './dto/update-certifications.dto';
 import { QuerySettlementDto } from '../settlements/dto/query-settlement.dto';
 import { GenerateSettlementDto } from '../settlements/dto/generate-settlement.dto';
 import { UpdateSettlementDto } from '../settlements/dto/update-settlement.dto';
+import { CreateProviderDto } from './dto/create-provider.dto';
+import { UpdateProviderDto } from './dto/update-provider.dto';
+import { AdminQueryProvidersDto } from './dto/admin-query-providers.dto';
+import { AdminUpsertProfileDto } from './dto/admin-upsert-profile.dto';
+import { PresignCoverDto } from '../providers/dto/presign-cover.dto';
+import { PublishProfileDto } from '../providers/dto/publish-profile.dto';
 
 @ApiTags('Admin')
 @ApiBearerAuth()
@@ -148,5 +155,49 @@ export class AdminController {
   @ApiOperation({ summary: '사용자 알림 캐시 충전' })
   chargeCash(@Param('id') id: string, @Body() dto: ChargeCashDto) {
     return this.adminService.chargeCash(id, dto);
+  }
+
+  // ─── Providers ─────────────────────────────────────
+
+  @Post('providers')
+  @ApiOperation({ summary: '업체 생성' })
+  createProvider(@Body() dto: CreateProviderDto) {
+    return this.adminService.createProvider(dto);
+  }
+
+  @Get('providers')
+  @ApiOperation({ summary: '업체 목록' })
+  findProviders(@Query() query: AdminQueryProvidersDto) {
+    return this.adminService.findProviders(query);
+  }
+
+  @Patch('providers/:id')
+  @ApiOperation({ summary: '업체 수정' })
+  updateProvider(@Param('id') id: string, @Body() dto: UpdateProviderDto) {
+    return this.adminService.updateProvider(id, dto);
+  }
+
+  @Get('providers/:id/profile')
+  @ApiOperation({ summary: '업체 프로필 조회 (관리자)' })
+  getProviderProfile(@Param('id') id: string) {
+    return this.adminService.getProviderProfile(id);
+  }
+
+  @Put('providers/:id/profile')
+  @ApiOperation({ summary: '업체 프로필 대리편집' })
+  upsertProviderProfile(@Param('id') id: string, @Body() dto: AdminUpsertProfileDto) {
+    return this.adminService.upsertProviderProfile(id, dto);
+  }
+
+  @Post('providers/:id/profile/cover-images/presign')
+  @ApiOperation({ summary: '업체 커버 이미지 presign (관리자)' })
+  presignProviderCoverImages(@Param('id') id: string, @Body() dto: PresignCoverDto) {
+    return this.adminService.presignProviderCoverImages(id, dto);
+  }
+
+  @Patch('providers/:id/profile/publish')
+  @ApiOperation({ summary: '업체 프로필 게시/비게시 (관리자)' })
+  publishProviderProfile(@Param('id') id: string, @Body() dto: PublishProfileDto) {
+    return this.adminService.publishProviderProfile(id, dto);
   }
 }

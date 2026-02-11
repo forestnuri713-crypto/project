@@ -8,7 +8,6 @@ import * as path from 'path';
 import {
   PROVIDER_COVER_UPLOAD_URL_EXPIRES_IN,
   GALLERY_SIGNED_URL_EXPIRES_IN,
-  PROVIDER_GALLERY_PREVIEW_MAX_COUNT,
   ProviderRole,
 } from '@sooptalk/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -50,27 +49,13 @@ export class ProvidersService {
     return member;
   }
 
-  /** 공개 프로필 조회 (미공개 시 404) — 프로그램/갤러리 자동 구성 포함 */
+  /** 공개 프로필 조회 (미공개 시 404) — SPEC 7.4 형식 */
   async getPublicProfile(providerId: string) {
     const profile = await this.prisma.providerProfile.findUnique({
       where: { providerId },
       include: {
         provider: {
-          include: {
-            members: {
-              where: { status: 'ACTIVE' },
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    name: true,
-                    profileImageUrl: true,
-                    certifications: true,
-                  },
-                },
-              },
-            },
-          },
+          select: { id: true, name: true, regionTags: true },
         },
       },
     });
@@ -79,37 +64,6 @@ export class ProvidersService {
       throw new NotFoundException('프로필을 찾을 수 없습니다');
     }
 
-    // 멤버 userId 목록 수집
-    const memberUserIds = profile.provider.members.map((m) => m.user.id);
-
-    // 프로그램 조회: 승인된 프로그램 중 (소속 강사 OR provider 직접 연결)
-    const programs = await this.prisma.program.findMany({
-      where: {
-        approvalStatus: 'APPROVED',
-        OR: [
-          { instructorId: { in: memberUserIds } },
-          { providerId },
-        ],
-      },
-      include: {
-        instructor: {
-          select: { id: true, name: true, profileImageUrl: true },
-        },
-      },
-      orderBy: { scheduleAt: 'asc' },
-    });
-
-    // 갤러리 조회: 위 프로그램 기반 최근 N개
-    const programIds = programs.map((p) => p.id);
-    const galleryItems = programIds.length > 0
-      ? await this.prisma.gallery.findMany({
-          where: { programId: { in: programIds } },
-          orderBy: { createdAt: 'desc' },
-          take: PROVIDER_GALLERY_PREVIEW_MAX_COUNT,
-        })
-      : [];
-
-    // coverImageUrls에 대해 presigned download URL 생성
     const coverImageKeys = profile.coverImageUrls as string[];
     const coverImageUrls = await Promise.all(
       coverImageKeys.map((key) =>
@@ -120,31 +74,18 @@ export class ProvidersService {
       ),
     );
 
-    // 갤러리 thumbnailKey → presigned URL 생성
-    const gallery = await Promise.all(
-      galleryItems.map(async (item) => ({
-        id: item.id,
-        programId: item.programId,
-        thumbnailUrl: await this.storageService.generateDownloadUrl(
-          item.thumbnailKey,
-          GALLERY_SIGNED_URL_EXPIRES_IN,
-        ),
-        createdAt: item.createdAt,
-      })),
-    );
-
-    const { provider, ...profileData } = profile;
-
     return {
-      ...profileData,
-      coverImageUrls,
-      members: provider.members.map((m) => ({
-        id: m.id,
-        roleInProvider: m.roleInProvider,
-        user: m.user,
-      })),
-      programs,
-      gallery,
+      provider: {
+        id: profile.provider.id,
+        name: profile.provider.name,
+        regionTags: profile.provider.regionTags,
+      },
+      profile: {
+        displayName: profile.displayName,
+        introShort: profile.introShort,
+        coverImageUrls,
+        isPublished: profile.isPublished,
+      },
     };
   }
 
