@@ -46,6 +46,21 @@ enum NotificationType {
   SETTLEMENT_CREATED
   INSTRUCTOR_APPROVED
   INSTRUCTOR_REJECTED
+  RESERVATION_BULK_CANCELLED
+}
+
+enum BulkCancelJobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  COMPLETED_WITH_ERRORS
+  FAILED
+}
+
+enum BulkCancelItemResult {
+  SUCCESS
+  FAILED
+  SKIPPED
 }
 
 enum InstructorStatus {
@@ -108,6 +123,7 @@ model User {
   settlements        Settlement[]
   providerMemberships ProviderMember[]
   reviews              Review[]
+  bulkCancelJobs       BulkCancelJob[]
 
   @@map("users")
 }
@@ -136,9 +152,10 @@ model Program {
 
   instructor   User          @relation(fields: [instructorId], references: [id])
   provider     Provider?     @relation(fields: [providerId], references: [id])
-  reservations Reservation[]
-  gallery      Gallery[]
-  reviews      Review[]
+  reservations   Reservation[]
+  gallery        Gallery[]
+  reviews        Review[]
+  bulkCancelJobs BulkCancelJob[]
 
   @@index([approvalStatus])
   @@map("programs")
@@ -156,9 +173,10 @@ model Reservation {
 
   user       User        @relation(fields: [userId], references: [id])
   program    Program     @relation(fields: [programId], references: [id])
-  payment    Payment?
-  attendance Attendance?
-  review     Review?
+  payment            Payment?
+  attendance         Attendance?
+  review             Review?
+  bulkCancelJobItems BulkCancelJobItem[]
 
   @@map("reservations")
 }
@@ -319,4 +337,45 @@ model Review {
   parentUser  User        @relation(fields: [parentUserId], references: [id])
 
   @@map("reviews")
+}
+
+model BulkCancelJob {
+  id                   String              @id @default(uuid())
+  sessionId            String              @map("session_id")
+  reason               String              @db.VarChar(200)
+  mode                 String
+  status               BulkCancelJobStatus @default(PENDING)
+  totalTargets         Int                 @default(0) @map("total_targets")
+  successCount         Int                 @default(0) @map("success_count")
+  failedCount          Int                 @default(0) @map("failed_count")
+  skippedCount         Int                 @default(0) @map("skipped_count")
+  createdByAdminUserId String              @map("created_by_admin_user_id")
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+  startedAt            DateTime?           @map("started_at")
+  finishedAt           DateTime?           @map("finished_at")
+
+  program  Program             @relation(fields: [sessionId], references: [id])
+  admin    User                @relation(fields: [createdByAdminUserId], references: [id])
+  items    BulkCancelJobItem[]
+
+  @@map("bulk_cancel_jobs")
+}
+
+model BulkCancelJobItem {
+  id               String               @id @default(uuid())
+  jobId            String               @map("job_id")
+  reservationId    String               @map("reservation_id")
+  result           BulkCancelItemResult @default(FAILED)
+  failureCode      String?              @map("failure_code")
+  failureMessage   String?              @map("failure_message")
+  attemptedAt      DateTime             @default(now()) @map("attempted_at")
+  refundedAmount   Int?                 @map("refunded_amount")
+  notificationSent Boolean              @default(false) @map("notification_sent")
+
+  job         BulkCancelJob @relation(fields: [jobId], references: [id])
+  reservation Reservation   @relation(fields: [reservationId], references: [id])
+
+  @@unique([jobId, reservationId])
+  @@map("bulk_cancel_job_items")
 }

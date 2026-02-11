@@ -7,6 +7,7 @@ import {
   Post,
   Put,
   Query,
+  Request,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -15,6 +16,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { AdminService } from './admin.service';
+import { AdminBulkCancelService } from './admin-bulk-cancel.service';
 import { SettlementsService } from '../settlements/settlements.service';
 import { AdminQueryProgramsDto } from './dto/admin-query-programs.dto';
 import { RejectProgramDto } from './dto/reject-program.dto';
@@ -35,6 +37,8 @@ import { PresignCoverDto } from '../providers/dto/presign-cover.dto';
 import { PublishProfileDto } from '../providers/dto/publish-profile.dto';
 import { AdminQueryReviewsDto } from './dto/admin-query-reviews.dto';
 import { UpdateReviewStatusDto } from './dto/update-review-status.dto';
+import { CreateBulkCancelJobDto } from './dto/create-bulk-cancel-job.dto';
+import { QueryBulkCancelItemsDto } from './dto/query-bulk-cancel-items.dto';
 
 @ApiTags('Admin')
 @ApiBearerAuth()
@@ -45,6 +49,7 @@ export class AdminController {
   constructor(
     private adminService: AdminService,
     private settlementsService: SettlementsService,
+    private bulkCancelService: AdminBulkCancelService,
   ) {}
 
   // ─── Dashboard ───────────────────────────────────────
@@ -215,5 +220,60 @@ export class AdminController {
   @ApiOperation({ summary: '리뷰 상태 변경 (VISIBLE/HIDDEN)' })
   setReviewStatus(@Param('id') id: string, @Body() dto: UpdateReviewStatusDto) {
     return this.adminService.setReviewStatus(id, dto.status);
+  }
+
+  // ─── Bulk Cancel ────────────────────────────────────
+
+  @Post('sessions/:sessionId/bulk-cancel')
+  @ApiOperation({ summary: '일괄 취소 작업 생성' })
+  createBulkCancelJob(
+    @Param('sessionId') sessionId: string,
+    @Body() dto: CreateBulkCancelJobDto,
+    @Request() req: { user: { id: string } },
+  ) {
+    return this.bulkCancelService.createJob(
+      sessionId,
+      dto.reason,
+      req.user.id,
+      dto.dryRun,
+    );
+  }
+
+  @Post('bulk-cancel-jobs/:jobId/start')
+  @ApiOperation({ summary: '일괄 취소 작업 실행' })
+  startBulkCancelJob(@Param('jobId') jobId: string) {
+    return this.bulkCancelService.startJob(jobId);
+  }
+
+  @Get('bulk-cancel-jobs/:jobId')
+  @ApiOperation({ summary: '일괄 취소 작업 조회' })
+  getBulkCancelJob(@Param('jobId') jobId: string) {
+    return this.bulkCancelService.getJobSummary(jobId);
+  }
+
+  @Get('bulk-cancel-jobs/:jobId/items')
+  @ApiOperation({ summary: '일괄 취소 작업 항목 조회' })
+  getBulkCancelJobItems(
+    @Param('jobId') jobId: string,
+    @Query() query: QueryBulkCancelItemsDto,
+  ) {
+    return this.bulkCancelService.getJobItems(
+      jobId,
+      query.page,
+      query.pageSize,
+      query.result,
+    );
+  }
+
+  @Post('bulk-cancel-jobs/:jobId/retry')
+  @ApiOperation({ summary: '실패 항목 재시도' })
+  retryBulkCancelJob(@Param('jobId') jobId: string) {
+    return this.bulkCancelService.retryFailed(jobId);
+  }
+
+  @Get('refund-mode')
+  @ApiOperation({ summary: '현재 환불 모드 조회' })
+  getRefundMode() {
+    return this.bulkCancelService.getRefundMode();
   }
 }
