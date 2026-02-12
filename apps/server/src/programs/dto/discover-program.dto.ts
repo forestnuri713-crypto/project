@@ -1,31 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export class QueryProgramDto {
-  @ApiPropertyOptional({ description: '지역 키워드', example: '강남' })
-  @IsOptional()
-  @IsString()
-  location?: string;
-
-  @ApiPropertyOptional({ description: '시작 날짜', example: '2025-06-01' })
-  @IsOptional()
-  @IsDateString()
-  dateFrom?: string;
-
-  @ApiPropertyOptional({ description: '종료 날짜', example: '2025-06-30' })
-  @IsOptional()
-  @IsDateString()
-  dateTo?: string;
-
-  @ApiPropertyOptional({ description: '최소 연령 이하 프로그램', example: 7 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  minAge?: number;
-
-  // Discovery params (SPEC §4.1) — when present, routes to discover() behavior
+export class DiscoverProgramDto {
   @ApiPropertyOptional({ description: '카테고리 슬러그', example: 'outdoor' })
   @IsOptional()
   @IsString()
@@ -36,7 +13,7 @@ export class QueryProgramDto {
   @IsString()
   keyword?: string;
 
-  @ApiPropertyOptional({ description: '지역 필터', example: '강남' })
+  @ApiPropertyOptional({ description: '지역 키워드', example: '강남' })
   @IsOptional()
   @IsString()
   region?: string;

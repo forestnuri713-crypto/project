@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -18,6 +19,7 @@ import { Roles } from '../auth/roles.decorator';
 import { AdminService } from './admin.service';
 import { AdminBulkCancelService } from './admin-bulk-cancel.service';
 import { SettlementsService } from '../settlements/settlements.service';
+import { CategoriesService } from '../categories/categories.service';
 import { AdminQueryProgramsDto } from './dto/admin-query-programs.dto';
 import { RejectProgramDto } from './dto/reject-program.dto';
 import { ChangeRoleDto } from './dto/change-role.dto';
@@ -39,6 +41,8 @@ import { AdminQueryReviewsDto } from './dto/admin-query-reviews.dto';
 import { UpdateReviewStatusDto } from './dto/update-review-status.dto';
 import { CreateBulkCancelJobDto } from './dto/create-bulk-cancel-job.dto';
 import { QueryBulkCancelItemsDto } from './dto/query-bulk-cancel-items.dto';
+import { CreateCategoryDto } from '../categories/dto/create-category.dto';
+import { UpdateCategoryDto } from '../categories/dto/update-category.dto';
 
 @ApiTags('Admin')
 @ApiBearerAuth()
@@ -50,6 +54,7 @@ export class AdminController {
     private adminService: AdminService,
     private settlementsService: SettlementsService,
     private bulkCancelService: AdminBulkCancelService,
+    private categoriesService: CategoriesService,
   ) {}
 
   // ─── Dashboard ───────────────────────────────────────
@@ -220,6 +225,26 @@ export class AdminController {
   @ApiOperation({ summary: '리뷰 상태 변경 (VISIBLE/HIDDEN)' })
   setReviewStatus(@Param('id') id: string, @Body() dto: UpdateReviewStatusDto) {
     return this.adminService.setReviewStatus(id, dto.status);
+  }
+
+  // ─── Categories ────────────────────────────────────
+
+  @Post('categories')
+  @ApiOperation({ summary: '카테고리 생성' })
+  createCategory(@Body() dto: CreateCategoryDto) {
+    return this.categoriesService.create(dto);
+  }
+
+  @Patch('categories/:id')
+  @ApiOperation({ summary: '카테고리 수정' })
+  updateCategory(@Param('id') id: string, @Body() dto: UpdateCategoryDto) {
+    return this.categoriesService.update(id, dto);
+  }
+
+  @Delete('categories/:id')
+  @ApiOperation({ summary: '카테고리 삭제' })
+  deleteCategory(@Param('id') id: string) {
+    return this.categoriesService.delete(id);
   }
 
   // ─── Bulk Cancel ────────────────────────────────────

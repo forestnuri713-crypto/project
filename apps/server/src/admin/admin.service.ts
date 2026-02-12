@@ -24,6 +24,7 @@ import { AdminQueryProvidersDto } from './dto/admin-query-providers.dto';
 import { AdminUpsertProfileDto } from './dto/admin-upsert-profile.dto';
 import { PresignCoverDto } from '../providers/dto/presign-cover.dto';
 import { PublishProfileDto } from '../providers/dto/publish-profile.dto';
+import { refreshProgramReviewStats } from '../reviews/review-stats.util';
 
 @Injectable()
 export class AdminService {
@@ -578,9 +579,13 @@ export class AdminService {
       throw new NotFoundException('리뷰를 찾을 수 없습니다');
     }
 
-    return this.prisma.review.update({
+    const updated = await this.prisma.review.update({
       where: { id: reviewId },
       data: { status },
     });
+
+    await refreshProgramReviewStats(this.prisma, review.programId);
+
+    return updated;
   }
 }

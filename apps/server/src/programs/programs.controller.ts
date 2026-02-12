@@ -8,6 +8,7 @@ import { ProgramsService } from './programs.service';
 import { CreateProgramDto } from './dto/create-program.dto';
 import { UpdateProgramDto } from './dto/update-program.dto';
 import { QueryProgramDto } from './dto/query-program.dto';
+import { DiscoverProgramDto } from './dto/discover-program.dto';
 
 @ApiTags('Programs')
 @Controller('programs')
@@ -15,9 +16,27 @@ export class ProgramsController {
   constructor(private programsService: ProgramsService) {}
 
   @Get()
-  @ApiOperation({ summary: '프로그램 목록 조회 (필터, 승인된 프로그램만)' })
+  @ApiOperation({ summary: '프로그램 목록 조회 (필터/탐색, 승인된 프로그램만)' })
   findAll(@Query() query: QueryProgramDto) {
+    const hasDiscoveryParams =
+      query.category !== undefined ||
+      query.keyword !== undefined ||
+      query.region !== undefined ||
+      query.sort !== undefined ||
+      query.page !== undefined ||
+      query.pageSize !== undefined;
+
+    if (hasDiscoveryParams) {
+      return this.programsService.discover(query);
+    }
+
     return this.programsService.findAll(query);
+  }
+
+  @Get('discover')
+  @ApiOperation({ summary: '프로그램 탐색 (카테고리/키워드/지역/정렬)' })
+  discover(@Query() query: DiscoverProgramDto) {
+    return this.programsService.discover(query);
   }
 
   @Get('my')

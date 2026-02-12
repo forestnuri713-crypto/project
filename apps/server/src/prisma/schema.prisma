@@ -145,6 +145,8 @@ model Program {
   isB2b            Boolean        @default(false) @map("is_b2b")
   safetyGuide      String?        @map("safety_guide")
   insuranceCovered Boolean        @default(false) @map("insurance_covered")
+  ratingAvg        Float          @default(0) @map("rating_avg")
+  reviewCount      Int            @default(0) @map("review_count")
   createdAt        DateTime       @default(now()) @map("created_at")
   updatedAt        DateTime       @updatedAt @map("updated_at")
 
@@ -156,6 +158,7 @@ model Program {
   gallery        Gallery[]
   reviews        Review[]
   bulkCancelJobs BulkCancelJob[]
+  categories     ProgramCategory[]
 
   @@index([approvalStatus])
   @@map("programs")
@@ -378,4 +381,28 @@ model BulkCancelJobItem {
 
   @@unique([jobId, reservationId])
   @@map("bulk_cancel_job_items")
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  programs ProgramCategory[]
+
+  @@map("categories")
+}
+
+model ProgramCategory {
+  programId  String   @map("program_id")
+  categoryId String   @map("category_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  program  Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([programId, categoryId])
+  @@map("program_categories")
 }

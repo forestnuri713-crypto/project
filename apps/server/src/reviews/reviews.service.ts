@@ -9,6 +9,7 @@ import { BusinessException } from '../common/exceptions/business.exception';
 import { canWriteReview } from '../domain/reservation.util';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
+import { refreshProgramReviewStats } from './review-stats.util';
 
 @Injectable()
 export class ReviewsService {
@@ -48,7 +49,7 @@ export class ReviewsService {
       );
     }
 
-    return this.prisma.review.create({
+    const review = await this.prisma.review.create({
       data: {
         programId: reservation.programId,
         reservationId: dto.reservationId,
@@ -57,6 +58,10 @@ export class ReviewsService {
         comment: dto.comment,
       },
     });
+
+    await refreshProgramReviewStats(this.prisma, reservation.programId);
+
+    return review;
   }
 
   async updateReview(userId: string, reviewId: string, dto: UpdateReviewDto) {
@@ -76,7 +81,7 @@ export class ReviewsService {
       throw new BadRequestException('리뷰는 1회만 수정할 수 있습니다');
     }
 
-    return this.prisma.review.update({
+    const updated = await this.prisma.review.update({
       where: { id: reviewId },
       data: {
         ...(dto.rating !== undefined && { rating: dto.rating }),
@@ -91,6 +96,12 @@ export class ReviewsService {
         updatedAt: true,
       },
     });
+
+    if (dto.rating !== undefined) {
+      await refreshProgramReviewStats(this.prisma, review.programId);
+    }
+
+    return updated;
   }
 
   async getReviewsByProgram(programId: string) {

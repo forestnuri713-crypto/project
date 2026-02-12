@@ -24,6 +24,9 @@ describe('ReviewsService', () => {
         aggregate: jest.fn(),
         count: jest.fn(),
       },
+      program: {
+        update: jest.fn(),
+      },
     };
     service = new ReviewsService(mockPrisma);
   });
@@ -32,7 +35,7 @@ describe('ReviewsService', () => {
     const userId = 'user-1';
     const dto = { reservationId: 'res-1', rating: 5, comment: '좋아요!' };
 
-    it('should create a review for COMPLETED reservation', async () => {
+    it('should create a review for COMPLETED reservation and refresh stats', async () => {
       mockPrisma.reservation.findUnique.mockResolvedValue({
         id: 'res-1',
         userId,
@@ -49,6 +52,11 @@ describe('ReviewsService', () => {
         rating: 5,
         comment: '좋아요!',
       });
+      mockPrisma.review.aggregate.mockResolvedValue({
+        _avg: { rating: 5.0 },
+        _count: { rating: 1 },
+      });
+      mockPrisma.program.update.mockResolvedValue({});
 
       const result = await service.createReview(userId, dto);
       expect(result.id).toBe('rev-1');
@@ -60,6 +68,10 @@ describe('ReviewsService', () => {
           rating: 5,
           comment: '좋아요!',
         },
+      });
+      expect(mockPrisma.program.update).toHaveBeenCalledWith({
+        where: { id: 'prog-1' },
+        data: { ratingAvg: 5.0, reviewCount: 1 },
       });
     });
 
@@ -73,6 +85,11 @@ describe('ReviewsService', () => {
       });
       mockPrisma.review.findUnique.mockResolvedValue(null);
       mockPrisma.review.create.mockResolvedValue({ id: 'rev-1' });
+      mockPrisma.review.aggregate.mockResolvedValue({
+        _avg: { rating: 5.0 },
+        _count: { rating: 1 },
+      });
+      mockPrisma.program.update.mockResolvedValue({});
 
       const result = await service.createReview(userId, dto);
       expect(result.id).toBe('rev-1');
@@ -127,12 +144,13 @@ describe('ReviewsService', () => {
   });
 
   describe('updateReview', () => {
-    it('should update review once and return fixed fields', async () => {
+    it('should update review once, return fixed fields, and refresh stats', async () => {
       const editedAt = new Date();
       const updatedAt = new Date();
       mockPrisma.review.findUnique.mockResolvedValue({
         id: 'rev-1',
         parentUserId: 'user-1',
+        programId: 'prog-1',
         editedAt: null,
       });
       mockPrisma.review.update.mockResolvedValue({
@@ -142,6 +160,11 @@ describe('ReviewsService', () => {
         editedAt,
         updatedAt,
       });
+      mockPrisma.review.aggregate.mockResolvedValue({
+        _avg: { rating: 4.0 },
+        _count: { rating: 1 },
+      });
+      mockPrisma.program.update.mockResolvedValue({});
 
       const result = await service.updateReview('user-1', 'rev-1', { rating: 4 });
       expect(result.rating).toBe(4);
@@ -161,12 +184,19 @@ describe('ReviewsService', () => {
           },
         }),
       );
+
+      // Verify stats refresh
+      expect(mockPrisma.program.update).toHaveBeenCalledWith({
+        where: { id: 'prog-1' },
+        data: { ratingAvg: 4.0, reviewCount: 1 },
+      });
     });
 
     it('should reject second edit', async () => {
       mockPrisma.review.findUnique.mockResolvedValue({
         id: 'rev-1',
         parentUserId: 'user-1',
+        programId: 'prog-1',
         editedAt: new Date(),
       });
 
@@ -179,6 +209,7 @@ describe('ReviewsService', () => {
       mockPrisma.review.findUnique.mockResolvedValue({
         id: 'rev-1',
         parentUserId: 'other-user',
+        programId: 'prog-1',
         editedAt: null,
       });
 
@@ -245,21 +276,31 @@ describe('AdminService - Review', () => {
         findUnique: jest.fn(),
         count: jest.fn(),
         update: jest.fn(),
+        aggregate: jest.fn(),
+      },
+      program: {
+        update: jest.fn(),
       },
     };
     service = new AdminService(mockPrisma, {} as any, {} as any);
   });
 
   describe('setReviewStatus', () => {
-    it('should set review to HIDDEN (idempotent)', async () => {
+    it('should set review to HIDDEN and refresh stats', async () => {
       mockPrisma.review.findUnique.mockResolvedValue({
         id: 'rev-1',
+        programId: 'prog-1',
         status: 'VISIBLE',
       });
       mockPrisma.review.update.mockResolvedValue({
         id: 'rev-1',
         status: 'HIDDEN',
       });
+      mockPrisma.review.aggregate.mockResolvedValue({
+        _avg: { rating: null },
+        _count: { rating: 0 },
+      });
+      mockPrisma.program.update.mockResolvedValue({});
 
       const result = await service.setReviewStatus('rev-1', 'HIDDEN');
       expect(result.status).toBe('HIDDEN');
@@ -267,17 +308,27 @@ describe('AdminService - Review', () => {
         where: { id: 'rev-1' },
         data: { status: 'HIDDEN' },
       });
+      expect(mockPrisma.program.update).toHaveBeenCalledWith({
+        where: { id: 'prog-1' },
+        data: { ratingAvg: 0, reviewCount: 0 },
+      });
     });
 
-    it('should set review to VISIBLE (idempotent)', async () => {
+    it('should set review to VISIBLE and refresh stats', async () => {
       mockPrisma.review.findUnique.mockResolvedValue({
         id: 'rev-1',
+        programId: 'prog-1',
         status: 'HIDDEN',
       });
       mockPrisma.review.update.mockResolvedValue({
         id: 'rev-1',
         status: 'VISIBLE',
       });
+      mockPrisma.review.aggregate.mockResolvedValue({
+        _avg: { rating: 4.0 },
+        _count: { rating: 1 },
+      });
+      mockPrisma.program.update.mockResolvedValue({});
 
       const result = await service.setReviewStatus('rev-1', 'VISIBLE');
       expect(result.status).toBe('VISIBLE');
@@ -286,12 +337,18 @@ describe('AdminService - Review', () => {
     it('should be idempotent — setting same status again succeeds', async () => {
       mockPrisma.review.findUnique.mockResolvedValue({
         id: 'rev-1',
+        programId: 'prog-1',
         status: 'HIDDEN',
       });
       mockPrisma.review.update.mockResolvedValue({
         id: 'rev-1',
         status: 'HIDDEN',
       });
+      mockPrisma.review.aggregate.mockResolvedValue({
+        _avg: { rating: null },
+        _count: { rating: 0 },
+      });
+      mockPrisma.program.update.mockResolvedValue({});
 
       const result = await service.setReviewStatus('rev-1', 'HIDDEN');
       expect(result.status).toBe('HIDDEN');
