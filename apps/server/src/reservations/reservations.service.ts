@@ -100,53 +100,30 @@ export class ReservationsService {
           );
         }
 
-        // --- Schedule-level capacity check (count-based MVP) ---
-        const schedule = await tx.programSchedule.findUnique({
-          where: { id: scheduleId },
-          select: { capacity: true },
-        });
-        const activeCount = await tx.reservation.count({
-          where: {
-            programScheduleId: scheduleId,
-            status: { in: ['PENDING', 'CONFIRMED'] },
-          },
-        });
-        if (activeCount + dto.participantCount > schedule!.capacity) {
+        // --- Atomic schedule-level capacity decrement ---
+        const decremented = await tx.$executeRaw`
+          UPDATE "program_schedules"
+          SET "remaining_capacity" = "remaining_capacity" - ${dto.participantCount},
+              "updated_at" = NOW()
+          WHERE "id" = ${scheduleId}
+            AND "status" = 'ACTIVE'
+            AND "remaining_capacity" >= ${dto.participantCount}
+        `;
+
+        if (decremented === 0) {
           throw new BusinessException(
             'CAPACITY_EXCEEDED',
             '잔여석이 부족합니다',
             400,
-            {
-              requested: dto.participantCount,
-              capacity: schedule!.capacity,
-              activeCount,
-              remaining: Math.max(0, schedule!.capacity - activeCount),
-            },
           );
         }
 
-        // Atomic increment: only succeeds if reservedCount + delta <= maxCapacity
-        const result = await tx.$executeRaw`
+        // Program-level reserved_count (analytics only, no enforcement)
+        await tx.$executeRaw`
           UPDATE "programs"
           SET "reserved_count" = "reserved_count" + ${dto.participantCount}
           WHERE "id" = ${dto.programId}
-            AND "reserved_count" + ${dto.participantCount} <= "max_capacity"
         `;
-
-        if (result === 0) {
-          const remaining = program.maxCapacity - program.reservedCount;
-          throw new BusinessException(
-            'CAPACITY_EXCEEDED',
-            '잔여석이 부족합니다',
-            400,
-            {
-              requested: dto.participantCount,
-              maxCapacity: program.maxCapacity,
-              reservedCount: program.reservedCount,
-              remaining: Math.max(0, remaining),
-            },
-          );
-        }
 
         const totalPrice = program.price * dto.participantCount;
 
