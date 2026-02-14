@@ -285,7 +285,7 @@ export class AdminController {
     return this.bulkCancelService.getJobItems(
       jobId,
       query.page,
-      query.pageSize,
+      query.resolvedLimit,
       query.result,
     );
   }

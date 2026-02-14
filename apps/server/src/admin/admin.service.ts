@@ -77,7 +77,7 @@ export class AdminService {
     }
 
     const page = query.page ?? 1;
-    const limit = query.limit ?? 20;
+    const limit = query.resolvedLimit;
 
     const [items, total] = await Promise.all([
       this.prisma.program.findMany({
@@ -173,7 +173,7 @@ export class AdminService {
     }
 
     const page = query.page ?? 1;
-    const limit = query.limit ?? 20;
+    const limit = query.resolvedLimit;
 
     const [items, total] = await Promise.all([
       this.prisma.user.findMany({
@@ -233,7 +233,7 @@ export class AdminService {
     }
 
     const page = query.page ?? 1;
-    const limit = query.limit ?? 20;
+    const limit = query.resolvedLimit;
 
     const [items, total] = await Promise.all([
       this.prisma.user.findMany({
@@ -386,12 +386,12 @@ export class AdminService {
   async findProviders(query: AdminQueryProvidersDto) {
     const where: Prisma.ProviderWhereInput = {};
 
-    if (query.query) {
-      where.name = { contains: query.query, mode: 'insensitive' };
+    if (query.resolvedSearch) {
+      where.name = { contains: query.resolvedSearch, mode: 'insensitive' };
     }
 
     const page = query.page ?? 1;
-    const pageSize = query.pageSize ?? 20;
+    const limit = query.resolvedLimit;
 
     const [items, total] = await Promise.all([
       this.prisma.provider.findMany({
@@ -400,13 +400,13 @@ export class AdminService {
           profile: { select: { isPublished: true } },
         },
         orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
+        skip: (page - 1) * limit,
+        take: limit,
       }),
       this.prisma.provider.count({ where }),
     ]);
 
-    return { items, total, page, pageSize };
+    return { items, total, page, limit };
   }
 
   async updateProvider(id: string, dto: UpdateProviderDto) {
@@ -551,7 +551,7 @@ export class AdminService {
     }
 
     const page = query.page ?? 1;
-    const limit = query.limit ?? 20;
+    const limit = query.resolvedLimit;
 
     const [items, total] = await Promise.all([
       this.prisma.review.findMany({
