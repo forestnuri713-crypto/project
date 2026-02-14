@@ -88,6 +88,11 @@ enum ApprovalStatus {
   REJECTED
 }
 
+enum ProgramScheduleStatus {
+  ACTIVE
+  CANCELLED
+}
+
 enum SettlementStatus {
   PENDING
   CONFIRMED
@@ -180,6 +185,7 @@ model Program {
   instructor   User          @relation(fields: [instructorId], references: [id])
   provider     Provider?     @relation(fields: [providerId], references: [id])
   reservations   Reservation[]
+  schedules      ProgramSchedule[]
   gallery        Gallery[]
   reviews        Review[]
   bulkCancelJobs BulkCancelJob[]
@@ -189,23 +195,45 @@ model Program {
   @@map("programs")
 }
 
-model Reservation {
-  id               String            @id @default(uuid())
-  userId           String            @map("user_id")
-  programId        String            @map("program_id")
-  status           ReservationStatus @default(PENDING)
-  participantCount Int               @map("participant_count")
-  totalPrice       Int               @map("total_price")
-  createdAt        DateTime          @default(now()) @map("created_at")
-  updatedAt        DateTime          @updatedAt @map("updated_at")
+model ProgramSchedule {
+  id        String                @id @default(uuid())
+  programId String                @map("program_id")
+  startAt   DateTime              @map("start_at")
+  endAt     DateTime?             @map("end_at")
+  capacity  Int
+  status    ProgramScheduleStatus @default(ACTIVE)
+  createdAt DateTime              @default(now()) @map("created_at")
+  updatedAt DateTime              @updatedAt @map("updated_at")
 
-  user       User        @relation(fields: [userId], references: [id])
-  program    Program     @relation(fields: [programId], references: [id])
+  program      Program       @relation(fields: [programId], references: [id])
+  reservations Reservation[]
+
+  @@unique([programId, startAt])
+  @@index([startAt])
+  @@index([programId])
+  @@map("program_schedules")
+}
+
+model Reservation {
+  id                 String            @id @default(uuid())
+  userId             String            @map("user_id")
+  programId          String            @map("program_id")
+  programScheduleId  String?           @map("program_schedule_id")
+  status             ReservationStatus @default(PENDING)
+  participantCount   Int               @map("participant_count")
+  totalPrice         Int               @map("total_price")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+
+  user            User             @relation(fields: [userId], references: [id])
+  program         Program          @relation(fields: [programId], references: [id])
+  programSchedule ProgramSchedule? @relation(fields: [programScheduleId], references: [id])
   payment            Payment?
   attendance         Attendance?
   review             Review?
   bulkCancelJobItems BulkCancelJobItem[]
 
+  @@index([programScheduleId])
   @@map("reservations")
 }
 

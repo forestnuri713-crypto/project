@@ -49,7 +49,80 @@ export class ReservationsService {
           '프로그램을 찾을 수 없습니다',
           404,
          );
-        }  
+        }
+
+        // --- Resolve ProgramSchedule ---
+        let scheduleId: string;
+        if (dto.programScheduleId) {
+          // Preferred path: use provided scheduleId
+          const schedule = await tx.programSchedule.findUnique({
+            where: { id: dto.programScheduleId },
+          });
+          if (!schedule || schedule.programId !== dto.programId) {
+            throw new BusinessException(
+              'SCHEDULE_NOT_FOUND',
+              '프로그램 회차를 찾을 수 없습니다',
+              404,
+            );
+          }
+          if (schedule.status === 'CANCELLED') {
+            throw new BusinessException(
+              'SCHEDULE_CANCELLED',
+              '취소된 회차에는 예약할 수 없습니다',
+              400,
+            );
+          }
+          scheduleId = schedule.id;
+        } else if (dto.startAt) {
+          // Fallback: upsert schedule by (programId, startAt)
+          const schedule = await tx.programSchedule.upsert({
+            where: {
+              programId_startAt: {
+                programId: dto.programId,
+                startAt: new Date(dto.startAt),
+              },
+            },
+            create: {
+              programId: dto.programId,
+              startAt: new Date(dto.startAt),
+              capacity: program.maxCapacity,
+              status: 'ACTIVE',
+            },
+            update: {},
+          });
+          scheduleId = schedule.id;
+        } else {
+          throw new BusinessException(
+            'VALIDATION_ERROR',
+            'programScheduleId 또는 startAt이 필요합니다',
+            400,
+          );
+        }
+
+        // --- Schedule-level capacity check (count-based MVP) ---
+        const schedule = await tx.programSchedule.findUnique({
+          where: { id: scheduleId },
+          select: { capacity: true },
+        });
+        const activeCount = await tx.reservation.count({
+          where: {
+            programScheduleId: scheduleId,
+            status: { in: ['PENDING', 'CONFIRMED'] },
+          },
+        });
+        if (activeCount + dto.participantCount > schedule!.capacity) {
+          throw new BusinessException(
+            'CAPACITY_EXCEEDED',
+            '잔여석이 부족합니다',
+            400,
+            {
+              requested: dto.participantCount,
+              capacity: schedule!.capacity,
+              activeCount,
+              remaining: Math.max(0, schedule!.capacity - activeCount),
+            },
+          );
+        }
 
         // Atomic increment: only succeeds if reservedCount + delta <= maxCapacity
         const result = await tx.$executeRaw`
@@ -80,6 +153,7 @@ export class ReservationsService {
           data: {
             userId,
             programId: dto.programId,
+            programScheduleId: scheduleId,
             participantCount: dto.participantCount,
             totalPrice,
             status: 'PENDING',
