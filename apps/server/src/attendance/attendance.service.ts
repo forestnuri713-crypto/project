@@ -52,6 +52,16 @@ export class AttendanceService {
           where: { id: attendance.reservationId },
           data: { status: 'COMPLETED' },
         }),
+        this.prisma.paymentSettlement.updateMany({
+          where: {
+            reservationId: attendance.reservationId,
+            status: 'PENDING',
+          },
+          data: {
+            status: 'CONFIRMED',
+            confirmedAt: new Date(),
+          },
+        }),
       );
     }
 
@@ -113,6 +123,16 @@ export class AttendanceService {
       this.prisma.reservation.update({
         where: { id: attendance.reservationId },
         data: { status: 'COMPLETED' },
+      }),
+      this.prisma.paymentSettlement.updateMany({
+        where: {
+          reservationId: attendance.reservationId,
+          status: 'PENDING',
+        },
+        data: {
+          status: 'CONFIRMED',
+          confirmedAt: new Date(),
+        },
       }),
     ]);
 
@@ -179,6 +199,16 @@ export class AttendanceService {
       this.prisma.reservation.update({
         where: { id: attendance.reservationId },
         data: { status: 'COMPLETED' },
+      }),
+      this.prisma.paymentSettlement.updateMany({
+        where: {
+          reservationId: attendance.reservationId,
+          status: 'PENDING',
+        },
+        data: {
+          status: 'CONFIRMED',
+          confirmedAt: new Date(),
+        },
       }),
     ]);
 

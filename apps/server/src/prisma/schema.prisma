@@ -94,6 +94,18 @@ enum SettlementStatus {
   PAID
 }
 
+enum PaymentSettlementStatus {
+  PENDING
+  CONFIRMED
+  PAID
+}
+
+enum PayoutStatus {
+  INITIATED
+  SUCCESS
+  FAILED
+}
+
 enum ProviderRole {
   OWNER
   MANAGER
@@ -213,7 +225,8 @@ model Payment {
   createdAt        DateTime      @default(now()) @map("created_at")
   updatedAt        DateTime      @updatedAt @map("updated_at")
 
-  reservation Reservation @relation(fields: [reservationId], references: [id])
+  reservation       Reservation        @relation(fields: [reservationId], references: [id])
+  paymentSettlement PaymentSettlement?
 
   @@map("payments")
 }
@@ -234,6 +247,39 @@ model PaymentWebhookEvent {
   @@index([merchantUid])
   @@index([receivedAt])
   @@map("payment_webhook_events")
+}
+
+model PaymentSettlement {
+  id            String                  @id @default(uuid())
+  reservationId String                  @unique @map("reservation_id")
+  paymentId     String                  @unique @map("payment_id")
+  grossAmount   Int                     @map("gross_amount")
+  platformRate  Decimal                 @map("platform_rate") @db.Decimal(5, 4)
+  platformFee   Int                     @map("platform_fee")
+  netAmount     Int                     @map("net_amount")
+  status        PaymentSettlementStatus @default(PENDING)
+  confirmedAt   DateTime?               @map("confirmed_at")
+  createdAt     DateTime                @default(now()) @map("created_at")
+  updatedAt     DateTime                @updatedAt @map("updated_at")
+
+  payment Payment  @relation(fields: [paymentId], references: [id])
+  payouts Payout[]
+
+  @@map("payment_settlements")
+}
+
+model Payout {
+  id           String       @id @default(uuid())
+  settlementId String       @map("settlement_id")
+  payoutKey    String       @unique @map("payout_key")
+  amount       Int
+  status       PayoutStatus @default(INITIATED)
+  executedAt   DateTime?    @map("executed_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  settlement PaymentSettlement @relation(fields: [settlementId], references: [id])
+
+  @@map("payouts")
 }
 
 model Attendance {

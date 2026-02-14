@@ -84,6 +84,9 @@ describe('PaymentsService - webhook idempotency', () => {
           return Promise.resolve({ count: 0 });
         }),
       },
+      paymentSettlement: {
+        upsert: jest.fn().mockResolvedValue({ id: 'stl-1' }),
+      },
       paymentWebhookEvent: {
         update: jest.fn().mockResolvedValue({}),
       },

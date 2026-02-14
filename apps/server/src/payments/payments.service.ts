@@ -191,6 +191,25 @@ export class PaymentsService {
                 where: { id: payment.id },
                 data: { status: 'PAID', paidAt: new Date() },
               });
+
+              // Create settlement record (idempotent by reservationId unique)
+              const grossAmount = payment.amount;
+              const platformFee = Math.floor(grossAmount * 0.10);
+              const netAmount = grossAmount - platformFee;
+              await tx.paymentSettlement.upsert({
+                where: { reservationId },
+                create: {
+                  reservationId,
+                  paymentId: payment.id,
+                  grossAmount,
+                  platformRate: new Prisma.Decimal('0.10'),
+                  platformFee,
+                  netAmount,
+                  status: 'PENDING',
+                },
+                update: {},
+              });
+
               reason = 'confirmed';
             }
           }
