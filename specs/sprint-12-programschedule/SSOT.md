@@ -108,4 +108,15 @@ Constraints:
 - CP1: Schema ✔
 - CP2: Schedule read API ✔
 - CP3: Reservation scheduleId migration path ✔
-- CP4: Backfill pending
+- CP4: Backfill ✔
+
+---
+
+## SSOT Progress
+
+| CP | Description | Status |
+|----|-------------|--------|
+| CP1 | ProgramSchedule 스키마 생성 | DONE |
+| CP2 | Schedule read API (GET /programs/:id/schedules) | DONE |
+| CP3 | Reservation 생성 시 programScheduleId 연결 (fallback upsert 포함) | DONE |
+| CP4 | 기존 Reservation backfill — NULL programScheduleId 해소 | DONE |
