@@ -250,3 +250,4 @@ filter reads it.
 - [x] CP3: Tests (error-envelope.spec.ts — 7 cases, request-id.spec.ts — 5 cases)
 - [x] tsc --noEmit PASS
 - [x] jest error-envelope request-id PASS (12/12)
+- [x] Full suite: 141/147 PASS — 6 pre-existing failures in reservation-cancel.spec.ts (3), reservation-schedule.spec.ts (3) tracked since Sprint 14
