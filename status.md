@@ -1,8 +1,8 @@
 # 숲똑 (SoopTalk) — 프로젝트 현황
 
-> 최종 업데이트: 2026-02-11
+> 최종 업데이트: 2026-02-14
 > 빌드 상태: `pnpm run build` 전체 성공 (shared, server, admin, mobile)
-> 커밋: `8e89383` (main)
+> 커밋: `f4f6030` (main)
 
 ---
 
@@ -16,6 +16,18 @@
 | Phase 3 | 알림 자동화 (FCM/Cron) + 사진첩 (S3/sharp) | 완료 |
 | Phase 4 | 정산 시스템 + 어드민 API | 완료 |
 | Phase 5 | 어드민 대시보드 (프론트엔드) | **미착수** |
+
+---
+
+## Sprint 진행 현황
+
+| Sprint | 내용 | 상태 |
+|--------|------|------|
+| Sprint 6 | 리뷰 시스템 | 완료 |
+| Sprint 7 | 우천 일괄 취소 (Bulk Cancel) | 완료 |
+| Sprint 8 | Hardening (ApiError 표준화, 도메인 유틸, 로깅) | 완료 |
+| Sprint 9 | 카테고리 & 디스커버리 레이어 | 완료 |
+| Sprint 10 | 예약 정합성 & 동시성 강화 | **완료** |
 
 ---
 
@@ -146,6 +158,66 @@
 | 업체 프로필 | 5 |
 | 스케줄링 (Cron) | 2 |
 | **합계** | **50 + Cron 2** |
+
+---
+
+## Sprint 10 — 예약 정합성 & 원자적 좌석 제어 (완료)
+
+### 개요
+동시성 환경에서 예약 도메인 무결성을 강화. 구조적 리팩토링 없이 기존 BusinessException + ApiErrorFilter 계약 유지.
+
+### 주요 변경
+
+| 항목 | 내용 |
+|------|------|
+| `Program.reservedCount` | 비정규화 좌석 카운터 추가 (aggregate join 제거) |
+| 마이그레이션 | `20260214000000_add_reserved_count` — backfill + CHECK(reserved_count >= 0) |
+| 예약 생성 | `prisma.$transaction` + 원자적 SQL UPDATE (reserved_count + delta ≤ max_capacity) |
+| 예약 취소 | `prisma.$transaction` + 원자적 decrement + BusinessException 가드 |
+| 일괄 취소 | `admin-bulk-cancel` 에도 원자적 reserved_count 감소 적용 |
+| 에러 표준화 | 모든 예외를 `BusinessException(code)` 으로 통일 |
+
+### 에러 코드
+
+| 코드 | HTTP | 설명 |
+|------|------|------|
+| `CAPACITY_EXCEEDED` | 400 | 잔여석 부족 |
+| `RESERVATION_ALREADY_CANCELLED` | 400 | 이미 취소된 예약 |
+| `RESERVATION_COMPLETED` | 400 | 완료된 예약 취소 불가 |
+| `RESERVATION_NOT_FOUND` | 404 | 예약 미존재 |
+| `RESERVATION_FORBIDDEN` | 403 | 본인 예약 아님 |
+| `INVARIANT_VIOLATION` | 500 | reservedCount 불변 조건 위반 |
+| `VALIDATION_ERROR` | 400 | participantCount ≤ 0 |
+
+### 테스트
+
+| 파일 | 테스트 수 | 검증 내용 |
+|------|-----------|-----------|
+| `reservation-concurrency.spec.ts` | 5 | 동시 생성 시 오버부킹 방지 (1인/2인/혼합), CAPACITY_EXCEEDED 상세, 유효성 검증 |
+| `reservation-cancel.spec.ts` | 9 | 취소 시 좌석 복원, 이중 취소 방지, 완료 예약 거부, 불변 조건, 환불 호출 검증 |
+
+### 검증 결과
+- `prisma generate`: PASS
+- `tsc --noEmit`: PASS
+- `jest`: 10 suites, 107 tests — ALL PASS
+- `nest build`: PASS
+
+### 변경 파일 (11개)
+
+**신규 (6개):**
+- `apps/server/src/prisma/migrations/20260209000000_add_settlement_and_approval/migration.sql`
+- `apps/server/src/prisma/migrations/20260214000000_add_reserved_count/migration.sql`
+- `apps/server/test/reservation-cancel.spec.ts`
+- `apps/server/test/reservation-concurrency.spec.ts`
+- `specs/sprint-08-hardening/SPEC_SPRINT8_HARDENING.md`
+- `specs/sprint-10-reservation-consistency/SPEC_SPRINT10_RESERVATION_CONSISTENCY.md`
+
+**수정 (5개):**
+- `apps/server/src/reservations/reservations.service.ts`
+- `apps/server/src/admin/admin-bulk-cancel.service.ts`
+- `apps/server/src/prisma/schema.prisma`
+- `apps/server/test/admin-bulk-cancel.spec.ts`
+- `status.md`
 
 ---
 
