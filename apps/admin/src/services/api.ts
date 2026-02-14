@@ -19,7 +19,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, body.message || res.statusText);
+    const err = body.error ?? body;
+    throw new ApiError(
+      res.status,
+      err.message || res.statusText,
+      err.code ?? null,
+      err.requestId ?? null,
+    );
   }
 
   if (res.status === 204) return null as T;
@@ -30,6 +36,8 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public code: string | null = null,
+    public requestId: string | null = null,
   ) {
     super(message);
   }
