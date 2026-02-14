@@ -1,8 +1,8 @@
 # 숲똑 (SoopTalk) — 프로젝트 현황
 
 > 최종 업데이트: 2026-02-14
-> 빌드 상태: `tsc --noEmit` PASS, `jest` ALL PASS
-> 커밋: `db2b64e` (main)
+> 빌드 상태: `tsc --noEmit` PASS, `jest` 141/147 PASS (6 pre-existing)
+> 커밋: `65ccbe9` (main)
 
 ---
 
@@ -32,6 +32,7 @@
 | Sprint 12 | ProgramSchedule 도입 (회차 분리) | 완료 |
 | Sprint 13 | Atomic Schedule Capacity (remaining_capacity) | **완료** |
 | Sprint 14 | Admin Readiness Hardening | **완료** |
+| Sprint 15 | Structured Error & Observability | **완료** |
 
 ---
 
@@ -312,6 +313,38 @@ Phase 5 (어드민 대시보드 프론트엔드) 진입 전 어드민 API 계약
 - `src/scripts/reconcile-capacity.ts` — 수리 모드, 낙관적 업데이트, 구조화 로깅
 - `test/reconcile-capacity.spec.ts` — 신규 5개 테스트
 - `specs/sprint-14-admin-readiness-hardening/SPEC_SPRINT14_SSOT.md` — SSOT 신규
+
+---
+
+## Sprint 15 — Structured Error & Observability (완료)
+
+### 개요
+에러 응답 표준화 + 요청 수준 관찰성 도입. Phase 5 (어드민 대시보드 UI) 진입 전 API 계약 정비.
+
+### Topic 1 — unified-error-envelope (PR #5)
+- 모든 에러 응답을 `{ success: false, error: { code, message, requestId, ...details } }` 형태로 통일
+- `BusinessException`, `ValidationPipe`, `HttpException`, 미처리 예외 모두 동일 envelope 적용
+- `requestId` 누락 시 `null` (crash 방지)
+- 테스트: `error-envelope.spec.ts` — 7개 PASS
+
+### Topic 2 — request-id-propagation (PR #5)
+- `RequestIdMiddleware`: `X-Request-Id` 헤더 수신 또는 `req_<crypto.randomUUID()>` 생성
+- `RequestIdInterceptor`: 요청 시작/종료 로깅 (method, url, status, duration, requestId)
+- Express `Request` 타입 확장 (`src/types/express.d.ts`)
+- 테스트: `request-id.spec.ts` — 5개 PASS
+
+### 변경 파일 (8개)
+**신규 (5개):**
+- `src/common/middleware/request-id.middleware.ts`
+- `src/common/interceptors/request-id.interceptor.ts`
+- `src/types/express.d.ts`
+- `test/error-envelope.spec.ts`
+- `test/request-id.spec.ts`
+
+**수정 (3개):**
+- `src/common/filters/api-error.filter.ts`
+- `src/app.module.ts`
+- `src/main.ts`
 
 ---
 
