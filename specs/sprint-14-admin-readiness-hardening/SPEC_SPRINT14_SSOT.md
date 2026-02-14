@@ -48,9 +48,9 @@ PR: https://github.com/forestnuri713-crypto/project/pull/3
 
 ### Topic 2 — reconcile-capacity-script (Done)
 
-PR: _(to be added after PR creation)_
+PR: https://github.com/forestnuri713-crypto/project/pull/4
 
-- [ ] Add PR link after PR creation
+- [x] Add PR link after PR creation
 
 **Scope:**
 
