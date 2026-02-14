@@ -2,7 +2,7 @@
 
 > 최종 업데이트: 2026-02-14
 > 빌드 상태: `tsc --noEmit` PASS, `jest` 141/147 PASS (6 pre-existing)
-> 커밋: `65ccbe9` (main)
+> 커밋: `ab34df0` (main)
 
 ---
 

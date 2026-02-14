@@ -19,12 +19,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    const err = body.error ?? body;
+    const err = body?.error ?? body;
+
     throw new ApiError(
-      res.status,
-      err.message || res.statusText,
-      err.code ?? null,
-      err.requestId ?? null,
+     res.status,
+     err?.message || res.statusText,
+     err?.code ?? null,
+     err?.requestId ?? null,
     );
   }
 
