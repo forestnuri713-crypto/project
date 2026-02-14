@@ -1,5 +1,6 @@
 import { ReviewsService } from '../src/reviews/reviews.service';
 import { AdminService } from '../src/admin/admin.service';
+import { AdminQueryReviewsDto } from '../src/admin/dto/admin-query-reviews.dto';
 import {
   BadRequestException,
   ForbiddenException,
@@ -370,12 +371,13 @@ describe('AdminService - Review', () => {
       ]);
       mockPrisma.review.count.mockResolvedValue(1);
 
-      const result = await service.findReviews({
+      const query = Object.assign(new AdminQueryReviewsDto(), {
         status: 'VISIBLE' as any,
         rating: 5,
         page: 1,
         limit: 20,
       });
+      const result = await service.findReviews(query);
 
       expect(result.items).toHaveLength(1);
       expect(result.total).toBe(1);

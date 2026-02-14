@@ -1,4 +1,5 @@
 import { AdminService } from '../src/admin/admin.service';
+import { AdminQueryProvidersDto } from '../src/admin/dto/admin-query-providers.dto';
 import { NotFoundException } from '@nestjs/common';
 
 describe('AdminService - Provider', () => {
@@ -46,10 +47,11 @@ describe('AdminService - Provider', () => {
     it('should return paginated providers', async () => {
       mockPrisma.provider.findMany.mockResolvedValue([{ id: '1', name: 'A' }]);
       mockPrisma.provider.count.mockResolvedValue(1);
-      const result = await service.findProviders({ page: 1, pageSize: 20 });
+      const query = Object.assign(new AdminQueryProvidersDto(), { page: 1, pageSize: 20 });
+      const result = await service.findProviders(query);
       expect(result.items).toHaveLength(1);
       expect(result.total).toBe(1);
-      expect(result.pageSize).toBe(20);
+      expect(result.limit).toBe(20);
     });
   });
 
