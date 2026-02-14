@@ -15,7 +15,7 @@ before Phase 5 (Admin Dashboard UI).
 
 | # | Topic | Status |
 |---|-------|--------|
-| 1 | `unified-error-envelope` | Pending |
+| 1 | `unified-error-envelope` | Done |
 | 2 | `request-id-propagation` | Done |
 
 ---
@@ -74,7 +74,7 @@ before Phase 5 (Admin Dashboard UI).
 
 ## 4. Topics
 
-### Topic 1 — unified-error-envelope (Pending)
+### Topic 1 — unified-error-envelope (Done)
 
 **Target error shape (all errors):**
 
@@ -178,23 +178,23 @@ Client → [RequestIdMiddleware: assign/propagate X-Request-Id]
 
 | File | Change |
 |------|--------|
-| `test/error-envelope.spec.ts` | Pending — verify envelope shape for all error branches |
+| `test/error-envelope.spec.ts` | Done — 7 test cases (T1–T6 + requestId null) |
 | `test/request-id.spec.ts` | Done — 5 test cases |
 
 ---
 
 ## 7. Test / Verification Plan
 
-### Topic 1 — unified-error-envelope (Pending)
+### Topic 1 — unified-error-envelope (Done)
 
 | # | Test Case | Assertion | Status |
 |---|-----------|-----------|--------|
-| T1 | BusinessException | Response has `{ success: false, error: { code, message, requestId } }` | Pending |
-| T2 | BusinessException with details | `error.details` included | Pending |
-| T3 | ValidationPipe error | `error.code = "VALIDATION_ERROR"`, `error.details.errors` is array | Pending |
-| T4 | HttpException (404, 403, etc.) | `error.code` matches `httpStatusToCode` | Pending |
-| T5 | Unhandled exception (500) | `error.code = "INTERNAL_ERROR"`, no stack leak | Pending |
-| T6 | All error responses include `requestId` | `error.requestId` is string matching `req_` prefix | Pending |
+| T1 | BusinessException | Response has `{ success: false, error: { code, message, requestId } }` | PASS |
+| T2 | BusinessException with details | `error.details` included | PASS |
+| T3 | ValidationPipe error | `error.code = "VALIDATION_ERROR"`, `error.details.errors` is array | PASS |
+| T4 | HttpException (404, 403, etc.) | `error.code` matches `httpStatusToCode` | PASS |
+| T5 | Unhandled exception (500) | `error.code = "INTERNAL_ERROR"`, no stack leak | PASS |
+| T6 | requestId missing | `error.requestId` is null, no crash | PASS |
 
 ### Topic 2 — request-id-propagation (Done)
 
@@ -210,8 +210,8 @@ Client → [RequestIdMiddleware: assign/propagate X-Request-Id]
 
 ```bash
 cd apps/server
-npx tsc --noEmit          # PASS
-npx jest request-id       # 5/5 PASS
+npx tsc --noEmit                    # PASS
+npx jest error-envelope request-id  # 12/12 PASS
 ```
 
 ---
@@ -235,8 +235,8 @@ npx jest request-id       # 5/5 PASS
 ## 9. Rollout Order
 
 1. **CP1:** Topic 2 — `request-id-propagation` (middleware + interceptor + type declaration) ✔
-2. **CP2:** Topic 1 — `unified-error-envelope` (filter change — depends on requestId being available)
-3. **CP3:** Tests + verification
+2. **CP2:** Topic 1 — `unified-error-envelope` (filter change — depends on requestId being available) ✔
+3. **CP3:** Tests + verification ✔
 
 Topic 2 ships first so that `requestId` is available on `req` when Topic 1's
 filter reads it.
@@ -246,7 +246,7 @@ filter reads it.
 ## 10. Progress
 
 - [x] CP1: request-id-propagation (middleware + interceptor)
-- [ ] CP2: unified-error-envelope (ApiErrorFilter)
-- [ ] CP3: Tests (error-envelope.spec.ts)
+- [x] CP2: unified-error-envelope (ApiErrorFilter)
+- [x] CP3: Tests (error-envelope.spec.ts — 7 cases, request-id.spec.ts — 5 cases)
 - [x] tsc --noEmit PASS
-- [x] jest request-id PASS (5/5)
+- [x] jest error-envelope request-id PASS (12/12)
