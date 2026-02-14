@@ -147,6 +147,7 @@ model Program {
   insuranceCovered Boolean        @default(false) @map("insurance_covered")
   ratingAvg        Float          @default(0) @map("rating_avg")
   reviewCount      Int            @default(0) @map("review_count")
+  reservedCount    Int            @default(0) @map("reserved_count")
   createdAt        DateTime       @default(now()) @map("created_at")
   updatedAt        DateTime       @updatedAt @map("updated_at")
 

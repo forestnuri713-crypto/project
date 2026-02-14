@@ -1,16 +1,10 @@
-import {
-  BadRequestException,
-  ConflictException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { REFUND_POLICY, REDIS_LOCK_TTL_MS } from '@sooptalk/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { PaymentsService } from '../payments/payments.service';
-import { isTerminalReservationStatus } from '../domain/reservation.util';
+import { BusinessException } from '../common/exceptions/business.exception';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { QueryReservationDto } from './dto/query-reservation.dto';
 
@@ -23,51 +17,77 @@ export class ReservationsService {
   ) {}
 
   async create(userId: string, dto: CreateReservationDto) {
+    if (dto.participantCount <= 0) {
+      throw new BusinessException(
+        'VALIDATION_ERROR',
+        '참여 인원은 1명 이상이어야 합니다',
+        400,
+      );
+    }
+
     const lockKey = `program:${dto.programId}:lock`;
     const lockValue = await this.redisService.acquireLock(lockKey, REDIS_LOCK_TTL_MS);
 
     if (!lockValue) {
-      throw new ConflictException('다른 사용자가 예약 중입니다. 잠시 후 다시 시도해주세요');
+      throw new BusinessException(
+       'RESERVATION_CONFLICT',
+       '다른 사용자가 예약 중입니다. 잠시 후 다시 시도해주세요',
+       409,
+      );
     }
 
     try {
-      const program = await this.prisma.program.findUnique({
-        where: { id: dto.programId },
-        include: {
-          _count: {
-            select: {
-              reservations: {
-                where: { status: { in: ['PENDING', 'CONFIRMED'] } },
-              },
+      return await this.prisma.$transaction(async (tx) => {
+        const program = await tx.program.findUnique({
+          where: { id: dto.programId },
+          select: { id: true, maxCapacity: true, reservedCount: true, price: true },
+        });
+
+       if (!program) {
+         throw new BusinessException(
+          'PROGRAM_NOT_FOUND',
+          '프로그램을 찾을 수 없습니다',
+          404,
+         );
+        }  
+
+        // Atomic increment: only succeeds if reservedCount + delta <= maxCapacity
+        const result = await tx.$executeRaw`
+          UPDATE "programs"
+          SET "reserved_count" = "reserved_count" + ${dto.participantCount}
+          WHERE "id" = ${dto.programId}
+            AND "reserved_count" + ${dto.participantCount} <= "max_capacity"
+        `;
+
+        if (result === 0) {
+          const remaining = program.maxCapacity - program.reservedCount;
+          throw new BusinessException(
+            'CAPACITY_EXCEEDED',
+            '잔여석이 부족합니다',
+            400,
+            {
+              requested: dto.participantCount,
+              maxCapacity: program.maxCapacity,
+              reservedCount: program.reservedCount,
+              remaining: Math.max(0, remaining),
             },
+          );
+        }
+
+        const totalPrice = program.price * dto.participantCount;
+
+        return tx.reservation.create({
+          data: {
+            userId,
+            programId: dto.programId,
+            participantCount: dto.participantCount,
+            totalPrice,
+            status: 'PENDING',
           },
-        },
-      });
-
-      if (!program) {
-        throw new NotFoundException('프로그램을 찾을 수 없습니다');
-      }
-
-      const remainingCapacity = program.maxCapacity - program._count.reservations;
-      if (dto.participantCount > remainingCapacity) {
-        throw new BadRequestException(
-          `잔여석이 부족합니다. 현재 잔여석: ${remainingCapacity}`,
-        );
-      }
-
-      const totalPrice = program.price * dto.participantCount;
-
-      return await this.prisma.reservation.create({
-        data: {
-          userId,
-          programId: dto.programId,
-          participantCount: dto.participantCount,
-          totalPrice,
-          status: 'PENDING',
-        },
-        include: {
-          program: { select: { id: true, title: true, scheduleAt: true, location: true } },
-        },
+          include: {
+            program: { select: { id: true, title: true, scheduleAt: true, location: true } },
+          },
+        });
       });
     } finally {
       await this.redisService.releaseLock(lockKey, lockValue);
@@ -93,27 +113,35 @@ export class ReservationsService {
   }
 
   async findOne(id: string, userId: string) {
-    const reservation = await this.prisma.reservation.findUnique({
-      where: { id },
-      include: {
-        program: {
-          include: {
-            instructor: { select: { id: true, name: true } },
-          },
+  const reservation = await this.prisma.reservation.findUnique({
+    where: { id },
+    include: {
+      program: {
+        include: {
+          instructor: { select: { id: true, name: true } },
         },
       },
-    });
+    },
+  });
 
-    if (!reservation) {
-      throw new NotFoundException('예약을 찾을 수 없습니다');
-    }
+  if (!reservation) {
+    throw new BusinessException(
+     'RESERVATION_NOT_FOUND',
+     '예약을 찾을 수 없습니다',
+     404,
+   );
+  } 
 
-    if (reservation.userId !== userId) {
-      throw new ForbiddenException('본인의 예약만 조회할 수 있습니다');
-    }
-
-    return reservation;
+  if (reservation.userId !== userId) {
+    throw new BusinessException(
+     'RESERVATION_FORBIDDEN',
+     '본인의 예약만 조회할 수 있습니다',
+     403,
+   );
   }
+
+  return reservation;
+}
 
   async cancel(id: string, userId: string) {
     const reservation = await this.prisma.reservation.findUnique({
@@ -122,18 +150,34 @@ export class ReservationsService {
     });
 
     if (!reservation) {
-      throw new NotFoundException('예약을 찾을 수 없습니다');
+      throw new BusinessException(
+       'RESERVATION_NOT_FOUND',
+       '예약을 찾을 수 없습니다',
+       404,
+     );
     }
 
     if (reservation.userId !== userId) {
-      throw new ForbiddenException('본인의 예약만 취소할 수 있습니다');
+      throw new BusinessException(
+       'RESERVATION_FORBIDDEN',
+       '본인의 예약만 취소할 수 있습니다',
+       403,
+     );
     }
 
-    if (isTerminalReservationStatus(reservation.status)) {
-      throw new BadRequestException(
-        reservation.status === 'CANCELLED'
-          ? '이미 취소된 예약입니다'
-          : '완료된 예약은 취소할 수 없습니다',
+    if (reservation.status === 'CANCELLED') {
+      throw new BusinessException(
+        'RESERVATION_ALREADY_CANCELLED',
+        '이미 취소된 예약입니다',
+        400,
+      );
+    }
+
+    if (reservation.status === 'COMPLETED') {
+      throw new BusinessException(
+        'RESERVATION_COMPLETED',
+        '완료된 예약은 취소할 수 없습니다',
+        400,
       );
     }
 
@@ -158,12 +202,32 @@ export class ReservationsService {
       await this.paymentsService.processRefund(reservation.id, refundAmount);
     }
 
-    const updated = await this.prisma.reservation.update({
-      where: { id },
-      data: { status: 'CANCELLED' },
-      include: {
-        program: { select: { id: true, title: true, scheduleAt: true } },
-      },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.reservation.update({
+        where: { id },
+        data: { status: 'CANCELLED' },
+        include: {
+          program: { select: { id: true, title: true, scheduleAt: true } },
+        },
+      });
+
+      // Atomic decrement: restore capacity
+      const decremented = await tx.$executeRaw`
+        UPDATE "programs"
+        SET "reserved_count" = "reserved_count" - ${reservation.participantCount}
+        WHERE "id" = ${reservation.programId}
+          AND "reserved_count" - ${reservation.participantCount} >= 0
+      `;
+
+      if (decremented === 0) {
+        throw new BusinessException(
+          'INVARIANT_VIOLATION',
+          'reservedCount 감소 중 불변 조건 위반',
+          500,
+        );
+      }
+
+      return result;
     });
 
     return {

@@ -27,6 +27,8 @@ interface MockPrisma {
     update: jest.Mock;
     count: jest.Mock;
   };
+  $transaction: jest.Mock;
+  $executeRaw: jest.Mock;
 }
 
 interface MockPaymentsService {
@@ -77,6 +79,8 @@ describe('AdminBulkCancelService', () => {
         update: jest.fn(),
         count: jest.fn(),
       },
+      $transaction: jest.fn((fn: (tx: MockPrisma) => Promise<unknown>) => fn(mockPrisma)),
+      $executeRaw: jest.fn().mockResolvedValue(1),
     };
 
     mockPaymentsService = {
@@ -127,6 +131,7 @@ describe('AdminBulkCancelService', () => {
           id: 'res-1',
           userId: 'user-1',
           totalPrice: 50000,
+          participantCount: 2,
           program: { scheduleAt: futureSchedule },
           payment: { id: 'pay-1' },
         },
@@ -155,6 +160,7 @@ describe('AdminBulkCancelService', () => {
           id: 'res-1',
           userId: 'user-1',
           totalPrice: 50000,
+          participantCount: 2,
           program: { scheduleAt: futureSchedule },
           payment: { id: 'pay-1' },
         },
@@ -229,6 +235,7 @@ describe('AdminBulkCancelService', () => {
               id: 'res-1',
               status: 'CANCELLED',
               totalPrice: 50000,
+              participantCount: 2,
               userId: 'user-1',
               program: {
                 scheduleAt: futureSchedule,
@@ -277,6 +284,7 @@ describe('AdminBulkCancelService', () => {
               id: 'res-1',
               status: 'CONFIRMED',
               totalPrice: 50000,
+              participantCount: 2,
               userId: 'user-1',
               program: {
                 scheduleAt: futureSchedule,
@@ -319,6 +327,7 @@ describe('AdminBulkCancelService', () => {
               id: 'res-1',
               status: 'CONFIRMED',
               totalPrice: 50000,
+              participantCount: 2,
               userId: 'user-1',
               program: {
                 scheduleAt: futureSchedule,
@@ -335,6 +344,7 @@ describe('AdminBulkCancelService', () => {
               id: 'res-2',
               status: 'CONFIRMED',
               totalPrice: 30000,
+              participantCount: 1,
               userId: 'user-2',
               program: {
                 scheduleAt: futureSchedule,

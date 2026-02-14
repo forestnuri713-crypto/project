@@ -55,6 +55,7 @@ interface ProcessItemInput {
     id: string;
     status: string;
     totalPrice: number;
+    participantCount: number;
     userId: string;
     program: { scheduleAt: Date; title: string; id: string };
     payment: {
@@ -287,9 +288,19 @@ export class AdminBulkCancelService {
         await this.paymentsService.processRefund(reservation.id, refundAmount);
       }
 
-      await this.prisma.reservation.update({
-        where: { id: reservation.id },
-        data: { status: 'CANCELLED' },
+      await this.prisma.$transaction(async (tx) => {
+        await tx.reservation.update({
+          where: { id: reservation.id },
+          data: { status: 'CANCELLED' },
+        });
+
+        // Atomic decrement: restore capacity for cancelled reservation
+        await tx.$executeRaw`
+          UPDATE "programs"
+          SET "reserved_count" = "reserved_count" - ${reservation.participantCount}
+          WHERE "id" = ${reservation.program.id}
+            AND "reserved_count" - ${reservation.participantCount} >= 0
+        `;
       });
 
       let notificationSent = false;
