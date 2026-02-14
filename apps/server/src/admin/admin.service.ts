@@ -260,6 +260,30 @@ export class AdminService {
     return { items, total, page, limit };
   }
 
+  async findInstructorById(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        phoneNumber: true,
+        profileImageUrl: true,
+        instructorStatus: true,
+        instructorStatusReason: true,
+        certifications: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('사용자를 찾을 수 없습니다');
+    }
+
+    return user;
+  }
+
   async approveInstructor(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },

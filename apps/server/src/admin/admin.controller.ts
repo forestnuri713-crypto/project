@@ -131,6 +131,12 @@ export class AdminController {
     return this.adminService.findInstructorApplications(query);
   }
 
+  @Get('instructors/:id')
+  @ApiOperation({ summary: '강사 상세 조회' })
+  findInstructor(@Param('id') id: string) {
+    return this.adminService.findInstructorById(id);
+  }
+
   @Patch('instructors/:id/approve')
   @ApiOperation({ summary: '강사 승인' })
   approveInstructor(@Param('id') id: string) {
