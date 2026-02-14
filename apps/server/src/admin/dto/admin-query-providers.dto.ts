@@ -6,6 +6,12 @@ export class AdminQueryProvidersDto {
   @ApiPropertyOptional({ description: '업체명 검색' })
   @IsOptional()
   @IsString()
+  search?: string;
+
+  /** @deprecated Use `search` instead */
+  @ApiPropertyOptional({ description: '업체명 검색 (alias for search)' })
+  @IsOptional()
+  @IsString()
   query?: string;
 
   @ApiPropertyOptional({ default: 1 })
@@ -21,5 +27,22 @@ export class AdminQueryProvidersDto {
   @IsInt()
   @Min(1)
   @Max(100)
-  pageSize?: number = 20;
+  limit?: number = 20;
+
+  /** @deprecated Use `limit` instead */
+  @ApiPropertyOptional({ description: 'Alias for limit' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize?: number;
+
+  get resolvedSearch(): string | undefined {
+    return this.search ?? this.query;
+  }
+
+  get resolvedLimit(): number {
+    return Math.min(this.limit ?? this.pageSize ?? 20, 100);
+  }
 }

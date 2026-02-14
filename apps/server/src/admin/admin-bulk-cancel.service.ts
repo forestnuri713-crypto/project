@@ -406,7 +406,7 @@ export class AdminBulkCancelService {
   async getJobItems(
     jobId: string,
     page = 1,
-    pageSize = 20,
+    limit = 20,
     result?: BulkCancelItemResult,
   ) {
     const job = await this.prisma.bulkCancelJob.findUnique({
@@ -438,8 +438,8 @@ export class AdminBulkCancelService {
             },
           },
         },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
+        skip: (page - 1) * limit,
+        take: limit,
         orderBy: { attemptedAt: 'desc' },
       }),
       this.prisma.bulkCancelJobItem.count({ where }),
@@ -449,8 +449,8 @@ export class AdminBulkCancelService {
       items,
       total,
       page,
-      pageSize,
-      totalPages: Math.ceil(total / pageSize),
+      limit,
+      totalPages: Math.ceil(total / limit),
     };
   }
 
