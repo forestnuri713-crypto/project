@@ -54,6 +54,12 @@ export class ProgramsController {
     return this.programsService.findOne(id);
   }
 
+  @Get(':programId/schedules')
+  @ApiOperation({ summary: '프로그램 회차 목록 조회' })
+  findSchedules(@Param('programId') programId: string) {
+    return this.programsService.findSchedules(programId);
+  }
+
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.INSTRUCTOR)

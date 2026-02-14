@@ -122,6 +122,25 @@ export class ProgramsService {
     });
   }
 
+  /** Returns active schedules for a program, ordered by startAt asc. */
+  async findSchedules(programId: string) {
+    const program = await this.prisma.program.findUnique({
+      where: { id: programId },
+      select: { id: true },
+    });
+
+    if (!program) {
+      throw new NotFoundException('프로그램을 찾을 수 없습니다');
+    }
+
+    // Return only ACTIVE schedules; cancelled schedules are excluded.
+    return this.prisma.programSchedule.findMany({
+      where: { programId, status: 'ACTIVE' },
+      select: { id: true, startAt: true, endAt: true, capacity: true, status: true },
+      orderBy: { startAt: 'asc' },
+    });
+  }
+
   async discover(query: DiscoverProgramDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
