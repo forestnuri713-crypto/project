@@ -255,31 +255,69 @@ export class ReservationsService {
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      const result = await tx.reservation.update({
+      // Step 0: Re-load inside tx for consistent read
+      const current = await tx.reservation.findUnique({
         where: { id },
-        data: { status: 'CANCELLED' },
-        include: {
+        select: {
+          id: true,
+          status: true,
+          participantCount: true,
+          programScheduleId: true,
+          programId: true,
           program: { select: { id: true, title: true, scheduleAt: true } },
         },
       });
 
-      // Atomic decrement: restore capacity
-      const decremented = await tx.$executeRaw`
-        UPDATE "programs"
-        SET "reserved_count" = "reserved_count" - ${reservation.participantCount}
-        WHERE "id" = ${reservation.programId}
-          AND "reserved_count" - ${reservation.participantCount} >= 0
-      `;
-
-      if (decremented === 0) {
+      if (!current) {
         throw new BusinessException(
-          'INVARIANT_VIOLATION',
-          'reservedCount 감소 중 불변 조건 위반',
-          500,
+          'RESERVATION_NOT_FOUND',
+          '예약을 찾을 수 없습니다',
+          404,
         );
       }
 
-      return result;
+      // Step 1: Atomic status transition — only first concurrent caller succeeds
+      const cancelled = await tx.reservation.updateMany({
+        where: {
+          id,
+          status: { in: ['PENDING', 'CONFIRMED'] },
+        },
+        data: { status: 'CANCELLED' },
+      });
+
+      // Step 2: Restore capacity only if this call performed the transition
+      if (cancelled.count === 1) {
+        // Schedule-level atomic increment
+        if (current.programScheduleId) {
+          const incremented = await tx.$executeRaw`
+            UPDATE "program_schedules"
+            SET "remaining_capacity" = "remaining_capacity" + ${current.participantCount},
+                "updated_at" = NOW()
+            WHERE "id" = ${current.programScheduleId}
+          `;
+
+          if (incremented === 0) {
+            throw new BusinessException(
+              'INVARIANT_VIOLATION',
+              'schedule not found during cancel',
+              500,
+            );
+          }
+        }
+
+        // Program-level reserved_count (analytics only)
+        await tx.$executeRaw`
+          UPDATE "programs"
+          SET "reserved_count" = "reserved_count" - ${current.participantCount}
+          WHERE "id" = ${current.programId}
+            AND "reserved_count" - ${current.participantCount} >= 0
+        `;
+      }
+
+      return {
+        ...current,
+        status: 'CANCELLED' as const,
+      };
     });
 
     return {
