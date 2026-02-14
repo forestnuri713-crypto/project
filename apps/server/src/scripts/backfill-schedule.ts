@@ -80,6 +80,7 @@ async function main() {
           programId,
           startAt: info.scheduleAt,
           capacity: info.maxCapacity,
+          remainingCapacity: info.maxCapacity,
           status: 'ACTIVE',
         },
         update: {},

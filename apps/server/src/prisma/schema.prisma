@@ -200,8 +200,9 @@ model ProgramSchedule {
   programId String                @map("program_id")
   startAt   DateTime              @map("start_at")
   endAt     DateTime?             @map("end_at")
-  capacity  Int
-  status    ProgramScheduleStatus @default(ACTIVE)
+  capacity          Int
+  remainingCapacity Int                   @map("remaining_capacity")
+  status            ProgramScheduleStatus @default(ACTIVE)
   createdAt DateTime              @default(now()) @map("created_at")
   updatedAt DateTime              @updatedAt @map("updated_at")
 

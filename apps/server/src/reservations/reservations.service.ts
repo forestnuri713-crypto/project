@@ -86,6 +86,7 @@ export class ReservationsService {
               programId: dto.programId,
               startAt: new Date(dto.startAt),
               capacity: program.maxCapacity,
+              remainingCapacity: program.maxCapacity,
               status: 'ACTIVE',
             },
             update: {},
