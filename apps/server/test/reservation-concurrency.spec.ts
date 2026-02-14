@@ -25,7 +25,16 @@ describe('ReservationsService - concurrency', () => {
           }),
         ),
       },
+      programSchedule: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'sch-1',
+          programId: 'prog-1',
+          capacity: maxCapacity,
+          status: 'ACTIVE',
+        }),
+      },
       reservation: {
+        count: jest.fn().mockImplementation(() => Promise.resolve(reservedCount)),
         create: jest.fn().mockImplementation((args: any) =>
           Promise.resolve({
             id: `res-${Math.random().toString(36).slice(2, 8)}`,
@@ -82,7 +91,7 @@ describe('ReservationsService - concurrency', () => {
       const attempts = 50;
       const results = await Promise.allSettled(
         Array.from({ length: attempts }, (_, i) =>
-          service.create(`user-${i}`, { programId: 'prog-1', participantCount: 1 }),
+          service.create(`user-${i}`, { programId: 'prog-1', programScheduleId: 'sch-1', participantCount: 1 }),
         ),
       );
 
@@ -107,7 +116,7 @@ describe('ReservationsService - concurrency', () => {
       const attempts = 20;
       const results = await Promise.allSettled(
         Array.from({ length: attempts }, (_, i) =>
-          service.create(`user-${i}`, { programId: 'prog-1', participantCount: 2 }),
+          service.create(`user-${i}`, { programId: 'prog-1', programScheduleId: 'sch-1', participantCount: 2 }),
         ),
       );
 
@@ -125,7 +134,7 @@ describe('ReservationsService - concurrency', () => {
       const attempts = Array.from({ length: 30 }, (_, i) => (i % 3) + 1); // 1, 2, 3, 1, 2, 3...
       const results = await Promise.allSettled(
         attempts.map((count, i) =>
-          service.create(`user-${i}`, { programId: 'prog-1', participantCount: count }),
+          service.create(`user-${i}`, { programId: 'prog-1', programScheduleId: 'sch-1', participantCount: count }),
         ),
       );
 
@@ -143,12 +152,12 @@ describe('ReservationsService - concurrency', () => {
   it('should throw CAPACITY_EXCEEDED with details', async () => {
     // Fill up capacity
     for (let i = 0; i < maxCapacity; i++) {
-      await service.create(`user-fill-${i}`, { programId: 'prog-1', participantCount: 1 });
+      await service.create(`user-fill-${i}`, { programId: 'prog-1', programScheduleId: 'sch-1', participantCount: 1 });
     }
 
     // Try to reserve when full
     await expect(
-      service.create('user-overflow', { programId: 'prog-1', participantCount: 1 }),
+      service.create('user-overflow', { programId: 'prog-1', programScheduleId: 'sch-1', participantCount: 1 }),
     ).rejects.toThrow(
       expect.objectContaining({
         code: 'CAPACITY_EXCEEDED',
@@ -158,7 +167,7 @@ describe('ReservationsService - concurrency', () => {
 
   it('should throw VALIDATION_ERROR for participantCount <= 0', async () => {
     await expect(
-      service.create('user-1', { programId: 'prog-1', participantCount: 0 }),
+      service.create('user-1', { programId: 'prog-1', programScheduleId: 'sch-1', participantCount: 0 }),
     ).rejects.toThrow(
       expect.objectContaining({
         code: 'VALIDATION_ERROR',
