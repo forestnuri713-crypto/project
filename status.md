@@ -2,7 +2,7 @@
 
 > 최종 업데이트: 2026-02-14
 > 빌드 상태: `tsc --noEmit` PASS, `jest` ALL PASS
-> 커밋: `a2d8325` (sprint-14/reconcile-capacity-script)
+> 커밋: `db2b64e` (main)
 
 ---
 
