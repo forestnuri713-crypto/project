@@ -2,7 +2,7 @@
 
 > 최종 업데이트: 2026-02-14
 > 빌드 상태: `tsc --noEmit` PASS, `jest` ALL PASS
-> 커밋: `d2ef6c7` (main, tag: sprint-13-complete)
+> 커밋: `a2d8325` (sprint-14/reconcile-capacity-script)
 
 ---
 
@@ -31,6 +31,7 @@
 | Sprint 11 | Payment Webhook 2-layer Idempotency | 완료 |
 | Sprint 12 | ProgramSchedule 도입 (회차 분리) | 완료 |
 | Sprint 13 | Atomic Schedule Capacity (remaining_capacity) | **완료** |
+| Sprint 14 | Admin Readiness Hardening | **완료** |
 
 ---
 
@@ -285,6 +286,32 @@ count-based 정원 체크를 `remaining_capacity` 원자적 증감으로 교체.
 - `test/reservation-concurrency.spec.ts`
 - `src/scripts/reconcile-capacity.ts`
 - `specs/sprint-13-remaining-capacity/SSOT.md`
+
+---
+
+## Sprint 14 — Admin Readiness Hardening (완료)
+
+### 개요
+Phase 5 (어드민 대시보드 프론트엔드) 진입 전 어드민 API 계약 안정화 + 운영 도구 강화.
+
+### Topic 1 — admin-api-contract-stabilization (PR #3)
+- 6개 어드민 쿼리 DTO에 `@Max(100)` + `resolvedLimit` 추가
+- `AdminQueryProvidersDto`: `search`/`query` alias + `resolvedSearch`
+- `QueryBulkCancelItemsDto`: `limit`/`pageSize` alias + `resolvedLimit`
+- `admin.service.ts`: `resolvedLimit`/`resolvedSearch` 사용으로 통일
+- 비파괴 별칭(deprecated DTO fields + resolver getters)으로 하위 호환 유지
+
+### Topic 2 — reconcile-capacity-script (PR #4)
+- `reconcile-capacity.ts`에 수리 모드 추가 (`FIX=1 CONFIRM=FIX_CAPACITY`)
+- 낙관적 업데이트: `WHERE remaining_capacity = $old` (동시 수정 감지)
+- 단일 `$transaction`으로 전체 수리 (all-or-nothing)
+- 구조화된 `[reconcile-capacity]` 요약 로깅
+- 테스트: `reconcile-capacity.spec.ts` — 5개 PASS
+
+### 변경 파일 (Topic 2, 3개)
+- `src/scripts/reconcile-capacity.ts` — 수리 모드, 낙관적 업데이트, 구조화 로깅
+- `test/reconcile-capacity.spec.ts` — 신규 5개 테스트
+- `specs/sprint-14-admin-readiness-hardening/SPEC_SPRINT14_SSOT.md` — SSOT 신규
 
 ---
 
