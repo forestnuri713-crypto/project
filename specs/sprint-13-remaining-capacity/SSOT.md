@@ -282,7 +282,7 @@ Increment never executes. No double-restore.
 
 ## Progress
 
-- CP1: Schema + migration + backfill — pending
-- CP2: Atomic decrement on create — pending
+- CP1: Schema + migration + backfill ✔
+- CP2: Atomic decrement on create ✔
 - CP3: Atomic increment on cancel — pending
 - CP4: Verification + tests — pending
