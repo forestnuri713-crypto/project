@@ -21,6 +21,6 @@ export class PaymentsController {
   @Post('webhook')
   @ApiOperation({ summary: 'PortOne 웹훅 수신' })
   handleWebhook(@Body() payload: WebhookPayloadDto) {
-    return this.paymentsService.handleWebhook(payload.data.paymentId);
+    return this.paymentsService.handleWebhook(payload);
   }
 }
