@@ -101,3 +101,11 @@ Constraints:
 - 기존 데이터 백필 완료
 - 테스트 통과
 - 빌드 통과
+
+---
+
+## Progress
+- CP1: Schema ✔
+- CP2: Schedule read API ✔
+- CP3: Reservation scheduleId migration path ✔
+- CP4: Backfill pending
