@@ -29,8 +29,20 @@ enum PaymentStatus {
   PENDING
   PAID
   FAILED
+  CANCELLED
   REFUNDED
   PARTIAL_REFUND
+}
+
+enum WebhookProvider {
+  PORTONE
+}
+
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
 }
 
 enum AttendanceStatus {
@@ -188,11 +200,14 @@ model Reservation {
 model Payment {
   id               String        @id @default(uuid())
   reservationId    String        @unique @map("reservation_id")
+  merchantUid      String        @unique @map("merchant_uid")
   method           PaymentMethod
   portonePaymentId String        @unique @map("portone_payment_id")
   amount           Int
   status           PaymentStatus @default(PENDING)
   paidAt           DateTime?     @map("paid_at")
+  cancelledAt      DateTime?     @map("cancelled_at")
+  failedAt         DateTime?     @map("failed_at")
   refundedAmount   Int           @default(0) @map("refunded_amount")
   refundedAt       DateTime?     @map("refunded_at")
   createdAt        DateTime      @default(now()) @map("created_at")
@@ -201,6 +216,24 @@ model Payment {
   reservation Reservation @relation(fields: [reservationId], references: [id])
 
   @@map("payments")
+}
+
+model PaymentWebhookEvent {
+  id          String             @id @default(uuid())
+  provider    WebhookProvider
+  eventKey    String             @map("event_key")
+  merchantUid String?            @map("merchant_uid")
+  eventType   String             @map("event_type")
+  status      WebhookEventStatus @default(RECEIVED)
+  rawBody     Json?              @map("raw_body")
+  receivedAt  DateTime           @default(now()) @map("received_at")
+  processedAt DateTime?          @map("processed_at")
+  createdAt   DateTime           @default(now()) @map("created_at")
+
+  @@unique([provider, eventKey])
+  @@index([merchantUid])
+  @@index([receivedAt])
+  @@map("payment_webhook_events")
 }
 
 model Attendance {

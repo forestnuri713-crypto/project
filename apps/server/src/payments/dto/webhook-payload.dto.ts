@@ -1,9 +1,17 @@
-import { IsObject, IsString } from 'class-validator';
+import { IsObject, IsOptional, IsString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 class WebhookData {
   @IsString()
   paymentId: string;
+
+  @IsString()
+  @IsOptional()
+  eventId?: string;
+
+  @IsString()
+  @IsOptional()
+  merchantUid?: string;
 }
 
 export class WebhookPayloadDto {

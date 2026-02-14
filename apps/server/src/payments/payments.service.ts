@@ -6,10 +6,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { randomUUID } from 'crypto';
+import { createHash } from 'crypto';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PortoneService } from './portone.service';
 import { PreparePaymentDto } from './dto/prepare-payment.dto';
+import { WebhookPayloadDto } from './dto/webhook-payload.dto';
 
 @Injectable()
 export class PaymentsService {
@@ -47,10 +49,12 @@ export class PaymentsService {
     }
 
     const portonePaymentId = `sooptalk_${reservation.id}_${Date.now()}`;
+    const merchantUid = portonePaymentId;
 
     await this.prisma.payment.create({
       data: {
         reservationId: reservation.id,
+        merchantUid,
         method: dto.method,
         portonePaymentId,
         amount: reservation.totalPrice,
@@ -62,6 +66,7 @@ export class PaymentsService {
 
     return {
       paymentId: portonePaymentId,
+      merchantUid,
       storeId: this.configService.get<string>('PORTONE_STORE_ID'),
       channelKey: this.configService.get<string>('PORTONE_CHANNEL_KEY'),
       amount: reservation.totalPrice,
@@ -69,55 +74,211 @@ export class PaymentsService {
     };
   }
 
-  async handleWebhook(paymentId: string) {
-    const portoneDetail = await this.portoneService.getPaymentDetail(paymentId);
+  private computeEventKey(
+    eventId: string | undefined,
+    eventType: string,
+    merchantUid: string,
+    providerPaymentId: string,
+  ): string {
+    if (eventId) return eventId;
+    const raw = `PORTONE:${eventType}:${merchantUid}:${providerPaymentId}`;
+    return createHash('sha256').update(raw).digest('hex');
+  }
 
-    const payment = await this.prisma.payment.findUnique({
-      where: { portonePaymentId: paymentId },
-      include: { reservation: true },
+  async handleWebhook(payload: WebhookPayloadDto) {
+    const eventType = payload.type;
+    const providerPaymentId = payload.data.paymentId;
+    const merchantUid = payload.data.merchantUid ?? providerPaymentId;
+    const eventKey = this.computeEventKey(
+      payload.data.eventId,
+      eventType,
+      merchantUid,
+      providerPaymentId,
+    );
+
+    this.logger.log(
+      JSON.stringify({
+        msg: 'webhook_received',
+        eventKey,
+        merchantUid,
+        eventType,
+      }),
+    );
+
+    // Layer A: event dedup — try insert, unique conflict = already processed
+    try {
+      await this.prisma.paymentWebhookEvent.create({
+        data: {
+          provider: 'PORTONE',
+          eventKey,
+          merchantUid,
+          eventType,
+          status: 'RECEIVED',
+          rawBody: payload as unknown as Prisma.InputJsonValue,
+        },
+      });
+    } catch (err: unknown) {
+      const prismaErr = err as { code?: string };
+      if (prismaErr.code === 'P2002') {
+        this.logger.log(
+          JSON.stringify({
+            msg: 'webhook_dedup',
+            eventKey,
+            merchantUid,
+            eventType,
+            result: 'IGNORED',
+            reason: 'duplicate_event_key',
+          }),
+        );
+        return { status: 'ok', dedup: true };
+      }
+      throw err;
+    }
+
+    // Layer B: domain idempotency within transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      const payment = await tx.payment.findUnique({
+        where: { merchantUid },
+        include: { reservation: true },
+      });
+
+      if (!payment) {
+        this.logger.warn(
+          JSON.stringify({
+            msg: 'webhook_no_payment',
+            eventKey,
+            merchantUid,
+            eventType,
+            result: 'FAILED',
+            reason: 'payment_not_found',
+          }),
+        );
+        await tx.paymentWebhookEvent.update({
+          where: { provider_eventKey: { provider: 'PORTONE', eventKey } },
+          data: { status: 'FAILED', processedAt: new Date() },
+        });
+        return { result: 'FAILED' as const, reason: 'payment_not_found' };
+      }
+
+      const reservationId = payment.reservationId;
+
+      let webhookResult: 'PROCESSED' | 'IGNORED' | 'FAILED' = 'PROCESSED';
+      let reason = '';
+
+      switch (eventType) {
+        case 'paid': {
+          // Verify with PortOne
+          const portoneDetail = await this.portoneService.getPaymentDetail(providerPaymentId);
+          const paidAmount = portoneDetail?.amount?.total;
+          if (paidAmount !== payment.amount) {
+            webhookResult = 'FAILED';
+            reason = `amount_mismatch: expected=${payment.amount} got=${paidAmount}`;
+            await tx.payment.update({
+              where: { id: payment.id },
+              data: { status: 'FAILED', failedAt: new Date() },
+            });
+          } else {
+            // Atomic: only transitions if not yet CONFIRMED
+            const confirmRes = await tx.reservation.updateMany({
+              where: { id: reservationId, status: { not: 'CONFIRMED' } },
+              data: { status: 'CONFIRMED' },
+            });
+            if (confirmRes.count === 0) {
+              webhookResult = 'IGNORED';
+              reason = 'reservation_already_confirmed';
+            } else {
+              await tx.payment.update({
+                where: { id: payment.id },
+                data: { status: 'PAID', paidAt: new Date() },
+              });
+              reason = 'confirmed';
+            }
+          }
+          break;
+        }
+
+        case 'failed': {
+          // Check reservation atomically — if CONFIRMED, ignore (out-of-order)
+          const reservation = await tx.reservation.findUnique({
+            where: { id: reservationId },
+            select: { status: true },
+          });
+          if (reservation?.status === 'CONFIRMED') {
+            webhookResult = 'IGNORED';
+            reason = 'reservation_already_confirmed_out_of_order';
+          } else if (payment.status === 'FAILED') {
+            webhookResult = 'IGNORED';
+            reason = 'already_failed';
+          } else {
+            await tx.payment.update({
+              where: { id: payment.id },
+              data: { status: 'FAILED', failedAt: new Date() },
+            });
+            reason = 'marked_failed';
+          }
+          break;
+        }
+
+        case 'cancelled': {
+          // Only allow cancel if PortOne confirms cancellation
+          try {
+            const portoneDetail = await this.portoneService.getPaymentDetail(providerPaymentId);
+            const portoneStatus = portoneDetail?.status;
+            if (portoneStatus !== 'CANCELLED' && portoneStatus !== 'cancelled') {
+              webhookResult = 'IGNORED';
+              reason = `cancel_not_verified: portone_status=${portoneStatus}`;
+              break;
+            }
+          } catch {
+            webhookResult = 'IGNORED';
+            reason = 'cancel_verification_failed';
+            break;
+          }
+
+          // Atomic: only transitions if currently CONFIRMED
+          const cancelRes = await tx.reservation.updateMany({
+            where: { id: reservationId, status: 'CONFIRMED' },
+            data: { status: 'CANCELLED' },
+          });
+          if (cancelRes.count === 0) {
+            webhookResult = 'IGNORED';
+            reason = 'reservation_not_confirmed_or_already_cancelled';
+          } else {
+            await tx.payment.update({
+              where: { id: payment.id },
+              data: { status: 'CANCELLED', cancelledAt: new Date() },
+            });
+            reason = 'cancelled_verified';
+          }
+          break;
+        }
+
+        default: {
+          webhookResult = 'IGNORED';
+          reason = `unknown_event_type: ${eventType}`;
+        }
+      }
+
+      await tx.paymentWebhookEvent.update({
+        where: { provider_eventKey: { provider: 'PORTONE', eventKey } },
+        data: { status: webhookResult, processedAt: new Date() },
+      });
+
+      return { result: webhookResult, reason };
     });
 
-    if (!payment) {
-      this.logger.warn(`Webhook: payment not found for ${paymentId}`);
-      return;
-    }
-
-    if (payment.status !== 'PENDING') {
-      this.logger.warn(`Webhook: payment ${paymentId} already processed (${payment.status})`);
-      return;
-    }
-
-    const paidAmount = portoneDetail?.amount?.total;
-    if (paidAmount !== payment.amount) {
-      this.logger.error(
-        `Webhook: amount mismatch for ${paymentId}. Expected ${payment.amount}, got ${paidAmount}`,
-      );
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: 'FAILED' },
-      });
-      return;
-    }
-
-    await this.prisma.$transaction([
-      this.prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: 'PAID', paidAt: new Date() },
+    this.logger.log(
+      JSON.stringify({
+        msg: 'webhook_processed',
+        eventKey,
+        merchantUid,
+        eventType,
+        result: result.result,
+        reason: result.reason,
       }),
-      this.prisma.reservation.update({
-        where: { id: payment.reservationId },
-        data: { status: 'CONFIRMED' },
-      }),
-      this.prisma.attendance.create({
-        data: {
-          reservationId: payment.reservationId,
-          qrCode: randomUUID(),
-          status: 'NO_SHOW',
-        },
-      }),
-    ]);
+    );
 
-    this.logger.log(`Payment confirmed: ${paymentId}`);
+    return { status: 'ok' };
   }
 
   async processRefund(reservationId: string, refundAmount: number) {
