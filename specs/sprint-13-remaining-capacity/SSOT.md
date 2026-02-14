@@ -285,4 +285,4 @@ Increment never executes. No double-restore.
 - CP1: Schema + migration + backfill ✔
 - CP2: Atomic decrement on create ✔
 - CP3: Atomic increment on cancel ✔
-- CP4: Verification + tests — pending
+- CP4: Verification + tests ✔

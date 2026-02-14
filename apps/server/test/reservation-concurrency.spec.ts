@@ -1,177 +1,323 @@
 import { ReservationsService } from '../src/reservations/reservations.service';
 import { BusinessException } from '../src/common/exceptions/business.exception';
 
-describe('ReservationsService - concurrency', () => {
-  let service: ReservationsService;
-  let mockPrisma: any;
-  let mockRedis: any;
-  let mockPayments: any;
+/**
+ * Barrier: resolves all waiters once n callers have arrived.
+ */
+function barrier(n: number): () => Promise<void> {
+  let arrived = 0;
+  let release: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  return () => {
+    arrived++;
+    if (arrived >= n) release();
+    return gate;
+  };
+}
 
-  // Simulates atomic reserved_count with in-memory state
-  let reservedCount: number;
-  const maxCapacity = 10;
+// ── In-memory DB state ──
 
-  beforeEach(() => {
-    reservedCount = 0;
+let remainingCapacity: number;
+let reservedCount: number;
+let reservationStore: Map<string, any>;
 
-    const txProxy: any = {
-      program: {
-        findUnique: jest.fn().mockImplementation(() =>
-          Promise.resolve({
-            id: 'prog-1',
-            maxCapacity,
-            reservedCount,
-            price: 10000,
-          }),
-        ),
-      },
-      programSchedule: {
-        findUnique: jest.fn().mockResolvedValue({
-          id: 'sch-1',
-          programId: 'prog-1',
-          capacity: maxCapacity,
-          status: 'ACTIVE',
-        }),
-      },
-      reservation: {
-        count: jest.fn().mockImplementation(() => Promise.resolve(reservedCount)),
-        create: jest.fn().mockImplementation((args: any) =>
-          Promise.resolve({
-            id: `res-${Math.random().toString(36).slice(2, 8)}`,
-            ...args.data,
-            program: { id: 'prog-1', title: 'Test', scheduleAt: new Date(), location: 'Seoul' },
-          }),
-        ),
-      },
-      $executeRaw: jest.fn().mockImplementation((...args: any[]) => {
-        // Parse the template literal — the first raw arg after template is participantCount
-        // For tagged template literals, args[0] is TemplateStringsArray, args[1..] are values
-        const strings = args[0];
-        const delta = args[1]; // participantCount
+const CAPACITY = 10;
+const SCHEDULE_AT = new Date('2026-04-01');
 
-        if (typeof delta !== 'number') return Promise.resolve(0);
+function buildExecuteRaw() {
+  return jest.fn().mockImplementation((...args: any[]) => {
+    const sql = Array.isArray(args[0]) ? args[0].join('?') : '';
+    const delta = args[1];
 
-        // Check if this is an increment (contains +)
-        const sql = Array.isArray(strings) ? strings.join('?') : '';
-        const isIncrement = sql.includes('+');
-
-        if (isIncrement) {
-          if (reservedCount + delta <= maxCapacity) {
-            reservedCount += delta;
-            return Promise.resolve(1);
-          }
-          return Promise.resolve(0);
-        }
-
-        // Decrement
-        if (reservedCount - delta >= 0) {
-          reservedCount -= delta;
+    if (sql.includes('program_schedules')) {
+      if (sql.includes('remaining_capacity" - ')) {
+        if (typeof delta === 'number' && remainingCapacity >= delta) {
+          remainingCapacity -= delta;
           return Promise.resolve(1);
         }
         return Promise.resolve(0);
+      }
+      if (sql.includes('remaining_capacity" + ')) {
+        if (typeof delta === 'number') remainingCapacity += delta;
+        return Promise.resolve(1);
+      }
+    }
+    if (sql.includes('programs')) {
+      if (typeof delta === 'number') {
+        if (sql.includes('reserved_count" + ')) reservedCount += delta;
+        else if (sql.includes('reserved_count" - ') && reservedCount >= delta) reservedCount -= delta;
+      }
+      return Promise.resolve(1);
+    }
+    return Promise.resolve(1);
+  });
+}
+
+function buildTxProxy(reservationOverrides?: Record<string, any>) {
+  const proxy: any = {
+    program: {
+      findUnique: jest.fn().mockImplementation(() =>
+        Promise.resolve({ id: 'prog-1', maxCapacity: CAPACITY, reservedCount, price: 10000 }),
+      ),
+    },
+    programSchedule: {
+      findUnique: jest.fn().mockResolvedValue({
+        id: 'sch-1', programId: 'prog-1', capacity: CAPACITY,
+        remainingCapacity, status: 'ACTIVE',
       }),
-    };
+    },
+    reservation: {
+      create: jest.fn().mockImplementation((args: any) => {
+        const res = {
+          id: `res-${Math.random().toString(36).slice(2, 8)}`,
+          ...args.data,
+          status: args.data.status ?? 'PENDING',
+          program: { id: 'prog-1', title: 'Test', scheduleAt: SCHEDULE_AT, location: 'Seoul' },
+        };
+        reservationStore.set(res.id, res);
+        return Promise.resolve(res);
+      }),
+      findUnique: jest.fn().mockImplementation((args: any) => {
+        const res = reservationStore.get(args.where.id);
+        if (!res) return Promise.resolve(null);
+        return Promise.resolve({
+          id: res.id, status: res.status,
+          participantCount: res.participantCount,
+          programScheduleId: res.programScheduleId,
+          programId: res.programId,
+          program: { id: 'prog-1', title: 'Test', scheduleAt: SCHEDULE_AT },
+        });
+      }),
+      updateMany: jest.fn().mockImplementation((args: any) => {
+        const res = reservationStore.get(args.where.id);
+        if (!res) return Promise.resolve({ count: 0 });
+        const allowed: string[] = args.where.status?.in ?? [args.where.status];
+        if (!allowed.includes(res.status)) return Promise.resolve({ count: 0 });
+        res.status = args.data.status;
+        return Promise.resolve({ count: 1 });
+      }),
+    },
+    $executeRaw: buildExecuteRaw(),
+  };
+  if (reservationOverrides) Object.assign(proxy.reservation, reservationOverrides);
+  return proxy;
+}
 
-    mockPrisma = {
-      $transaction: jest.fn((fn: (tx: any) => Promise<any>) => fn(txProxy)),
-    };
+function preTxFindUnique() {
+  return jest.fn().mockImplementation((args: any) => {
+    const res = reservationStore.get(args.where.id);
+    if (!res) return Promise.resolve(null);
+    return Promise.resolve({
+      ...res,
+      program: {
+        id: 'prog-1', title: 'Test', scheduleAt: SCHEDULE_AT,
+        maxCapacity: CAPACITY, price: 10000, instructorId: 'inst-1',
+        description: '', location: 'Seoul', latitude: 0, longitude: 0,
+        minAge: 0, approvalStatus: 'APPROVED', rejectionReason: null,
+        isB2b: false, safetyGuide: null, insuranceCovered: false,
+        ratingAvg: 0, reviewCount: 0, reservedCount: 0,
+        providerId: null, createdAt: new Date(), updatedAt: new Date(),
+      },
+      payment: null,
+      userId: res.userId,
+      totalPrice: res.totalPrice,
+    });
+  });
+}
 
-    mockRedis = {
-      acquireLock: jest.fn().mockResolvedValue('lock-value'),
-      releaseLock: jest.fn().mockResolvedValue(true),
-    };
+interface BuildServiceOpts {
+  txResOverrides?: Record<string, any>;
+  txGate?: () => Promise<void>;
+}
 
-    mockPayments = {};
+function buildService(opts: BuildServiceOpts = {}) {
+  const mockPrisma: any = {
+    $transaction: jest.fn(async (fn: any) => {
+      if (opts.txGate) await opts.txGate();
+      return fn(buildTxProxy(opts.txResOverrides));
+    }),
+    reservation: { findUnique: preTxFindUnique() },
+  };
+  const mockRedis: any = {
+    acquireLock: jest.fn().mockResolvedValue('lock-value'),
+    releaseLock: jest.fn().mockResolvedValue(true),
+  };
+  const mockPayments: any = {
+    processRefund: jest.fn().mockResolvedValue(undefined),
+  };
+  return new ReservationsService(mockPrisma, mockRedis, mockPayments);
+}
 
-    service = new ReservationsService(mockPrisma, mockRedis, mockPayments);
+// ── Tests ──
+
+describe('ReservationsService - concurrency (remaining_capacity)', () => {
+  beforeEach(() => {
+    remainingCapacity = CAPACITY;
+    reservedCount = 0;
+    reservationStore = new Map();
   });
 
-  describe('participantCount=1', () => {
-    it('should not exceed maxCapacity with 50 concurrent requests', async () => {
-      const attempts = 50;
-      const results = await Promise.allSettled(
-        Array.from({ length: attempts }, (_, i) =>
-          service.create(`user-${i}`, { programId: 'prog-1', programScheduleId: 'sch-1', participantCount: 1 }),
-        ),
-      );
+  // ─── 1. Concurrent booking race (barrier-based, looped) ───
 
-      const successes = results.filter((r) => r.status === 'fulfilled');
-      const failures = results.filter((r) => r.status === 'rejected');
+  describe('concurrent booking — barrier-based race', () => {
+    it('exactly 1 succeeds when remaining_capacity=1 (20 iterations)', async () => {
+      for (let iter = 0; iter < 20; iter++) {
+        remainingCapacity = 1;
+        reservedCount = 0;
+        reservationStore = new Map();
 
-      // Total seats reserved must be <= maxCapacity
-      expect(successes.length).toBeLessThanOrEqual(maxCapacity);
-      expect(successes.length).toBe(maxCapacity);
-      expect(reservedCount).toBe(successes.length);
+        const service = buildService();
+        const wait = barrier(2);
 
-      // All failures should be CAPACITY_EXCEEDED
-      for (const f of failures) {
-        expect((f as PromiseRejectedResult).reason).toBeInstanceOf(BusinessException);
-        expect((f as PromiseRejectedResult).reason.code).toBe('CAPACITY_EXCEEDED');
+        const results = await Promise.allSettled([
+          wait().then(() =>
+            service.create('user-a', { programId: 'prog-1', programScheduleId: 'sch-1', participantCount: 1 }),
+          ),
+          wait().then(() =>
+            service.create('user-b', { programId: 'prog-1', programScheduleId: 'sch-1', participantCount: 1 }),
+          ),
+        ]);
+
+        const successes = results.filter((r) => r.status === 'fulfilled');
+        const failures = results.filter((r) => r.status === 'rejected');
+
+        expect(successes).toHaveLength(1);
+        expect(failures).toHaveLength(1);
+        expect((failures[0] as PromiseRejectedResult).reason.code).toBe('CAPACITY_EXCEEDED');
+
+        // DB invariant: remaining_capacity = 0
+        expect(remainingCapacity).toBe(0);
+
+        // DB invariant: only 1 active reservation
+        const active = Array.from(reservationStore.values()).filter(
+          (r) => r.programScheduleId === 'sch-1' && ['PENDING', 'CONFIRMED'].includes(r.status),
+        );
+        expect(active).toHaveLength(1);
       }
     });
   });
 
-  describe('participantCount=2', () => {
-    it('should not exceed maxCapacity with 20 concurrent requests of 2 seats', async () => {
-      const attempts = 20;
-      const results = await Promise.allSettled(
-        Array.from({ length: attempts }, (_, i) =>
-          service.create(`user-${i}`, { programId: 'prog-1', programScheduleId: 'sch-1', participantCount: 2 }),
-        ),
-      );
+  // ─── 2. Concurrent cancel — tx-entry barrier, looped ───
 
-      const successes = results.filter((r) => r.status === 'fulfilled');
+  describe('concurrent cancel — tx-entry barrier, looped invariant check', () => {
+    it('remaining_capacity increases by exactly participant_count once (20 iterations)', async () => {
+      const participantCount = 3;
 
-      // Total seats reserved must be <= maxCapacity
-      const totalSeats = successes.length * 2;
-      expect(totalSeats).toBeLessThanOrEqual(maxCapacity);
-      expect(reservedCount).toBe(totalSeats);
+      for (let iter = 0; iter < 20; iter++) {
+        remainingCapacity = CAPACITY - participantCount; // 7
+        reservedCount = participantCount;
+        reservationStore = new Map();
+
+        const resId = `res-iter-${iter}`;
+        reservationStore.set(resId, {
+          id: resId,
+          userId: 'user-1',
+          programId: 'prog-1',
+          programScheduleId: 'sch-1',
+          status: 'PENDING',
+          participantCount,
+          totalPrice: participantCount * 10000,
+        });
+
+        // Barrier at $transaction entry so both cancels pass pre-tx checks then race
+        const txGate = barrier(2);
+        const service = buildService({ txGate });
+        const capacityBefore = remainingCapacity;
+
+        const results = await Promise.allSettled([
+          service.cancel(resId, 'user-1'),
+          service.cancel(resId, 'user-1'),
+        ]);
+
+        // DB invariant: remaining_capacity increased by exactly participantCount ONCE
+        expect(remainingCapacity).toBe(capacityBefore + participantCount);
+
+        // DB invariant: reservation is CANCELLED
+        expect(reservationStore.get(resId).status).toBe('CANCELLED');
+
+        // At least one call succeeded
+        const successes = results.filter((r) => r.status === 'fulfilled');
+        expect(successes.length).toBeGreaterThanOrEqual(1);
+      }
     });
   });
 
-  describe('mixed participantCount', () => {
-    it('should never overbooking with mixed counts', async () => {
-      const attempts = Array.from({ length: 30 }, (_, i) => (i % 3) + 1); // 1, 2, 3, 1, 2, 3...
-      const results = await Promise.allSettled(
-        attempts.map((count, i) =>
-          service.create(`user-${i}`, { programId: 'prog-1', programScheduleId: 'sch-1', participantCount: count }),
-        ),
+  // ─── 3. Rollback safety ───
+
+  describe('rollback — failure after decrement restores capacity', () => {
+    it('remaining_capacity unchanged when reservation.create fails after decrement', async () => {
+      const initial = CAPACITY;
+      let decrementObserved = false;
+
+      const mockPrisma: any = {
+        $transaction: jest.fn(async (fn: any) => {
+          const snapshot = remainingCapacity;
+          try {
+            return await fn(buildTxProxy({
+              create: jest.fn().mockImplementation(() => {
+                // Prove decrement happened before create was called
+                decrementObserved = remainingCapacity < snapshot;
+                return Promise.reject(new Error('FK violation'));
+              }),
+            }));
+          } catch (e) {
+            remainingCapacity = snapshot; // simulate PG rollback
+            throw e;
+          }
+        }),
+        reservation: { findUnique: preTxFindUnique() },
+      };
+      const service = new ReservationsService(
+        mockPrisma,
+        { acquireLock: jest.fn().mockResolvedValue('lk'), releaseLock: jest.fn() } as any,
+        { processRefund: jest.fn() } as any,
       );
 
-      const successes = results.filter((r) => r.status === 'fulfilled');
-      const totalSeats = successes.reduce((sum, r) => {
-        const reservation = (r as PromiseFulfilledResult<any>).value;
-        return sum + reservation.participantCount;
-      }, 0);
+      await expect(
+        service.create('user-1', { programId: 'prog-1', programScheduleId: 'sch-1', participantCount: 3 }),
+      ).rejects.toThrow('FK violation');
 
-      expect(totalSeats).toBeLessThanOrEqual(maxCapacity);
-      expect(reservedCount).toBe(totalSeats);
+      // Decrement did happen inside the tx before create threw
+      expect(decrementObserved).toBe(true);
+      // DB invariant: remaining_capacity restored to pre-tx value
+      expect(remainingCapacity).toBe(initial);
+      // DB invariant: no reservation persisted
+      expect(reservationStore.size).toBe(0);
     });
   });
 
-  it('should throw CAPACITY_EXCEEDED with details', async () => {
-    // Fill up capacity
-    for (let i = 0; i < maxCapacity; i++) {
-      await service.create(`user-fill-${i}`, { programId: 'prog-1', programScheduleId: 'sch-1', participantCount: 1 });
-    }
+  // ─── 4. Reconciliation ───
 
-    // Try to reserve when full
+  describe('reconciliation — remaining_capacity consistency', () => {
+    it('remaining_capacity = capacity - active participant_count after book+cancel', async () => {
+      const service = buildService();
+
+      const r1 = await service.create('user-1', { programId: 'prog-1', programScheduleId: 'sch-1', participantCount: 4 });
+      await service.create('user-2', { programId: 'prog-1', programScheduleId: 'sch-1', participantCount: 2 });
+      await service.cancel(r1.id, 'user-1');
+
+      const activeParticipants = Array.from(reservationStore.values())
+        .filter((r) => r.programScheduleId === 'sch-1' && ['PENDING', 'CONFIRMED'].includes(r.status))
+        .reduce((sum: number, r: any) => sum + r.participantCount, 0);
+
+      expect(remainingCapacity).toBe(CAPACITY - activeParticipants);
+    });
+  });
+
+  // ─── Basic validation ───
+
+  it('should throw CAPACITY_EXCEEDED when full', async () => {
+    remainingCapacity = 0;
+    const service = buildService();
     await expect(
-      service.create('user-overflow', { programId: 'prog-1', programScheduleId: 'sch-1', participantCount: 1 }),
-    ).rejects.toThrow(
-      expect.objectContaining({
-        code: 'CAPACITY_EXCEEDED',
-      }),
-    );
+      service.create('user-1', { programId: 'prog-1', programScheduleId: 'sch-1', participantCount: 1 }),
+    ).rejects.toMatchObject({ code: 'CAPACITY_EXCEEDED' });
   });
 
   it('should throw VALIDATION_ERROR for participantCount <= 0', async () => {
+    const service = buildService();
     await expect(
       service.create('user-1', { programId: 'prog-1', programScheduleId: 'sch-1', participantCount: 0 }),
-    ).rejects.toThrow(
-      expect.objectContaining({
-        code: 'VALIDATION_ERROR',
-      }),
-    );
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 });
