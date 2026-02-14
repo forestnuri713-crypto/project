@@ -1,8 +1,8 @@
 # 숲똑 (SoopTalk) — 프로젝트 현황
 
 > 최종 업데이트: 2026-02-14
-> 빌드 상태: `pnpm run build` 전체 성공 (shared, server, admin, mobile)
-> 커밋: `f4f6030` (main)
+> 빌드 상태: `tsc --noEmit` PASS, `jest` ALL PASS
+> 커밋: `d2ef6c7` (main, tag: sprint-13-complete)
 
 ---
 
@@ -27,7 +27,10 @@
 | Sprint 7 | 우천 일괄 취소 (Bulk Cancel) | 완료 |
 | Sprint 8 | Hardening (ApiError 표준화, 도메인 유틸, 로깅) | 완료 |
 | Sprint 9 | 카테고리 & 디스커버리 레이어 | 완료 |
-| Sprint 10 | 예약 정합성 & 동시성 강화 | **완료** |
+| Sprint 10 | 예약 정합성 & 동시성 강화 | 완료 |
+| Sprint 11 | Payment Webhook 2-layer Idempotency | 완료 |
+| Sprint 12 | ProgramSchedule 도입 (회차 분리) | 완료 |
+| Sprint 13 | Atomic Schedule Capacity (remaining_capacity) | **완료** |
 
 ---
 
@@ -221,7 +224,72 @@
 
 ---
 
+## Sprint 12 — ProgramSchedule 도입 (완료)
+
+### 개요
+예약을 Program이 아닌 ProgramSchedule(회차)에 귀속시켜 일정/정원의 SSOT를 분리.
+
+### 주요 변경
+
+| 항목 | 내용 |
+|------|------|
+| `ProgramSchedule` 모델 | id, programId, startAt, endAt, capacity, status (ACTIVE/CANCELLED) |
+| 제약조건 | UNIQUE(programId, startAt), INDEX(startAt), INDEX(programId) |
+| `Reservation.programScheduleId` | nullable FK 추가 (기존 데이터 호환) |
+| 예약 생성 | programScheduleId 기반 + startAt fallback upsert |
+| 스케줄 조회 | `GET /programs/:id/schedules` 신규 |
+| 백필 스크립트 | `src/scripts/backfill-schedule.ts` — DRY_RUN, per-program tx, idempotent |
+
+### 변경 파일 (10개)
+- `schema.prisma`, `migrations/20260214200000_add_program_schedule/migration.sql`
+- `reservations.service.ts`, `create-reservation.dto.ts`
+- `programs.controller.ts`, `programs.service.ts`
+- `test/program-schedule.spec.ts`, `test/reservation-schedule.spec.ts`, `test/reservation-concurrency.spec.ts`
+- `specs/sprint-12-programschedule/SSOT.md`
+
+---
+
+## Sprint 13 — Atomic Schedule Capacity (완료)
+
+### 개요
+count-based 정원 체크를 `remaining_capacity` 원자적 증감으로 교체. PostgreSQL 행 수준 잠금으로 동시성 안전 보장.
+
+### 주요 변경
+
+| 항목 | 내용 |
+|------|------|
+| `program_schedules.remaining_capacity` | INT NOT NULL + CHECK(≥ 0) — 데이터 무결성 가드 |
+| 마이그레이션 | `20260216000000_add_remaining_capacity` — 컬럼 추가 + backfill + NOT NULL + CHECK |
+| 예약 생성 | `$executeRaw` 원자적 decrement (`WHERE remaining_capacity >= participantCount`) |
+| 예약 취소 | 3-step idempotent: findUnique → updateMany(status guard) → conditional increment |
+| `programs.reserved_count` | analytics only (enforcement 제거) |
+| 정합성 스크립트 | `src/scripts/reconcile-capacity.ts` — mismatch 쿼리, 0 rows = OK |
+
+### 동시성 보장
+
+| 시나리오 | 보장 |
+|----------|------|
+| 동시 예약 | 행 수준 UPDATE 직렬화; WHERE 절이 concurrency guard |
+| 동시 취소 | updateMany status guard — 첫 호출만 count=1, 나머지 skip |
+| 롤백 | decrement + create 동일 $transaction — create 실패 시 전체 롤백 |
+
+### 테스트
+
+| 파일 | 검증 내용 |
+|------|-----------|
+| `reservation-concurrency.spec.ts` | barrier-based booking race (20 iter), tx-entry barrier cancel (20 iter), rollback proof, reconciliation |
+
+### 변경 파일 (6개)
+- `schema.prisma`, `migrations/20260216000000_add_remaining_capacity/migration.sql`
+- `reservations.service.ts`
+- `test/reservation-concurrency.spec.ts`
+- `src/scripts/reconcile-capacity.ts`
+- `specs/sprint-13-remaining-capacity/SSOT.md`
+
+---
+
 ## 다음 단계
 
 - **Phase 5**: 어드민 대시보드 프론트엔드 (Next.js) — 미착수
+- Redis 분산 락 제거 검토 (remaining_capacity로 대체 가능)
 - DB 마이그레이션 적용: `npx prisma migrate deploy` 필요
