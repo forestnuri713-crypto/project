@@ -155,6 +155,7 @@ model User {
   providerMemberships ProviderMember[]
   reviews              Review[]
   bulkCancelJobs       BulkCancelJob[]
+  slugHistories        SlugHistory[]
 
   @@map("users")
 }
@@ -516,4 +517,15 @@ model ProgramCategory {
 
   @@id([programId, categoryId])
   @@map("program_categories")
+}
+
+model SlugHistory {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("slug_histories")
 }

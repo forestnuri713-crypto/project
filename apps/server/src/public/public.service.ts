@@ -57,6 +57,17 @@ export class PublicService {
           select: USER_SELECT,
         });
 
+    if (!user && !isUuid) {
+      // Slug not found — check slug history for redirects
+      const history = await this.prisma.slugHistory.findUnique({
+        where: { slug: key.toLowerCase() },
+        select: { user: { select: { slug: true, instructorStatus: true } } },
+      });
+      if (history && history.user.instructorStatus === 'APPROVED' && history.user.slug) {
+        return { redirect: history.user.slug };
+      }
+    }
+
     if (!user || user.instructorStatus !== 'APPROVED') {
       throw new NotFoundException('Not Found');
     }
