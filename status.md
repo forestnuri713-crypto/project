@@ -38,7 +38,7 @@
 | Sprint 18 | Dashboard Drill-down + Metrics Expansion (Read-only) | 완료 |
 | Sprint 19 | Admin Visibility + Observability | 완료 |
 | Sprint 20 M1 | Public Instructor Profile Skeleton | 완료 |
-| Sprint 20 M2 | Slug Strategy | 진행 중 |
+| Sprint 20 M2 | Slug Strategy | 완료 |
 
 ---
 
@@ -490,8 +490,52 @@ Public Instructor Profile 읽기 전용 스켈레톤 페이지 구현. slug 기�
 
 ---
 
+## Sprint 20 — M2 Slug Strategy (완료)
+
+### 개요
+Human-readable slug 도입. UUID 기반 기존 링크와 backward compatibility 유지 (dual-read + 308 redirect).
+
+### 주요 변경
+
+| 항목 | 내용 |
+|------|------|
+| `User.slug` | `String? @unique` — nullable + unique constraint 추가 |
+| Slug 형식 | `{romanized-name}-{shortId}` (shortId = UUID 앞 4자) |
+| 한글 로마자 변환 | 자체 경량 jamo 분해 매핑 (외부 의존성 없음) |
+| Dual-read | UUID → `findUnique({ id })`, slug → `findFirst({ slug })` |
+| 308 Redirect | UUID로 접근 시 canonical slug URL로 308 Permanent Redirect |
+| Slug 생성 | 회원 가입 시 자동 생성 (best-effort, try/catch) |
+| Backfill 스크립트 | `src/scripts/backfill-slug.ts` — DRY_RUN 지원, idempotent |
+| Fallback | 이름 없는 경우 `inst-{shortId}`, 충돌 시 `-2`, `-3` 접미사 |
+| 예약 시스템 | **무변경** |
+
+### 변경 파일
+
+**신규 (5개):**
+- `apps/server/src/prisma/migrations/20260217000000_add_slug_to_user/migration.sql` — slug 컬럼 + unique index
+- `apps/server/src/public/slug.utils.ts` — `slugify()` + `generateUniqueSlug()`
+- `apps/server/src/scripts/backfill-slug.ts` — 기존 APPROVED 강사 slug 백필
+- `apps/server/test/slug-utils.spec.ts` — slug 유틸 테스트 (13개)
+- `apps/server/test/public-instructor-profile.spec.ts` — 프로필 엔드포인트 테스트 (9개)
+
+**수정 (3개):**
+- `apps/server/src/prisma/schema.prisma` — User 모델에 `slug String? @unique` 추가
+- `apps/server/src/public/public.service.ts` — dual-read + 308 redirect 시그널
+- `apps/server/src/public/public.controller.ts` — 308 redirect 처리
+- `apps/server/src/auth/auth.service.ts` — 회원 가입 시 slug 자동 생성
+
+### 검증 결과
+- `apps/server pnpm build`: PASS
+- `apps/server pnpm test`: 18 passed, 2 failed (pre-existing reservation mock issues, Sprint 20 무관)
+- `apps/web pnpm build`: PASS
+- `apps/admin pnpm build`: PASS
+- 예약 시스템 코드/테스트: **무변경** (git diff 확인)
+- Local DB migration: PASS
+- Backfill dry-run: verified
+
+---
+
 ## 다음 단계
 
-- **Sprint 20 M2** (진행 중): Slug Strategy — 실제 human-readable slug 도입 + backward compatibility (id/slug dual-read)
 - Redis 분산 락 제거 검토 (remaining_capacity로 대체 가능)
 - DB 마이그레이션 적용: `npx prisma migrate deploy` 필요
