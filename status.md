@@ -37,6 +37,7 @@
 | Sprint 17 | Admin Pagination + Metrics Foundation | 완료 |
 | Sprint 18 | Dashboard Drill-down + Metrics Expansion (Read-only) | 완료 |
 | Sprint 19 | Admin Visibility + Observability | 완료 |
+| Sprint 20 | Vendor Mini Homepage MVP | 진행 중 |
 
 ---
 
@@ -454,8 +455,42 @@ Sprint 16에서 이연된 CP5 M4 (일괄 취소 항목 페이지네이션) 완�
 
 ---
 
+## Sprint 20 — Vendor Mini Homepage MVP: M1 Public Profile Skeleton (완료)
+
+### 개요
+Public Instructor Profile 읽기 전용 스켈레톤 페이지 구현. slug 기반 라우팅, isPublic 가드(instructorStatus=APPROVED), 예약 시스템 무변경.
+
+### 변경 파일
+
+**신규 (Backend 3개):**
+- `apps/server/src/public/public.module.ts` — PublicModule 등록
+- `apps/server/src/public/public.controller.ts` — `GET /public/instructors/:slug` 엔드포인트
+- `apps/server/src/public/public.service.ts` — 강사 조회 + isPublic(APPROVED) 가드 + 404
+
+**수정 (Backend 1개):**
+- `apps/server/src/app.module.ts` — PublicModule import 추가
+
+**신규 (Frontend 8개):**
+- `apps/web/package.json` — @sooptalk/web Next.js 앱 (port 3002)
+- `apps/web/tsconfig.json` — TypeScript 설정
+- `apps/web/next.config.js` — Next.js 설정 (transpilePackages)
+- `apps/web/postcss.config.js` — Tailwind CSS PostCSS 설정
+- `apps/web/src/app/globals.css` — Tailwind import
+- `apps/web/src/app/layout.tsx` — Root layout
+- `apps/web/src/app/page.tsx` — 홈페이지 placeholder
+- `apps/web/src/app/instructors/[slug]/page.tsx` — 강사 공개 프로필 페이지
+- `apps/web/src/lib/api.ts` — Public API fetch 유틸
+
+### 검증 결과
+- `apps/server pnpm build`: PASS
+- `apps/server pnpm test`: 16 passed, 2 failed (pre-existing mock issues, Sprint 20 무관)
+- `apps/web pnpm build`: PASS
+- 예약 시스템 코드/테스트: **무변경**
+
+---
+
 ## 다음 단계
 
-- **Sprint 20** (예정): Admin Evolution Phase 2
+- **Sprint 20 M2** (이후): Provider Mini Homepage 확장
 - Redis 분산 락 제거 검토 (remaining_capacity로 대체 가능)
 - DB 마이그레이션 적용: `npx prisma migrate deploy` 필요
