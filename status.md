@@ -37,7 +37,8 @@
 | Sprint 17 | Admin Pagination + Metrics Foundation | 완료 |
 | Sprint 18 | Dashboard Drill-down + Metrics Expansion (Read-only) | 완료 |
 | Sprint 19 | Admin Visibility + Observability | 완료 |
-| Sprint 20 | Vendor Mini Homepage MVP | 진행 중 |
+| Sprint 20 M1 | Public Instructor Profile Skeleton | 완료 |
+| Sprint 20 M2 | Slug Strategy | 진행 중 |
 
 ---
 
@@ -491,6 +492,6 @@ Public Instructor Profile 읽기 전용 스켈레톤 페이지 구현. slug 기�
 
 ## 다음 단계
 
-- **Sprint 20 M2** (이후): Provider Mini Homepage 확장
+- **Sprint 20 M2** (진행 중): Slug Strategy — 실제 human-readable slug 도입 + backward compatibility (id/slug dual-read)
 - Redis 분산 락 제거 검토 (remaining_capacity로 대체 가능)
 - DB 마이그레이션 적용: `npx prisma migrate deploy` 필요
