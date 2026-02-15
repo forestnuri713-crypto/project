@@ -37,6 +37,30 @@ interface DryRunResult {
   estimatedRefunds: EstimatedRefund[];
 }
 
+interface CreatedJob {
+  id: string;
+  sessionId: string;
+  reason: string;
+  mode: string;
+  status: string;
+  totalTargets: number;
+}
+
+interface JobSummary {
+  id: string;
+  sessionId: string;
+  reason: string;
+  mode: string;
+  status: string;
+  totalTargets: number;
+  successCount: number;
+  failedCount: number;
+  skippedCount: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+  program: { id: string; title: string; scheduleAt: string } | null;
+}
+
 interface ErrorState {
   message: string;
   code: string | null;
@@ -64,6 +88,11 @@ export default function BulkCancelPage() {
   // Submission state
   const [submitting, setSubmitting] = useState(false);
   const [dryRunResult, setDryRunResult] = useState<DryRunResult | null>(null);
+
+  // Execution state (Milestone 3)
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [executing, setExecuting] = useState(false);
+  const [jobResult, setJobResult] = useState<JobSummary | null>(null);
 
   // Error state
   const [error, setError] = useState<ErrorState | null>(null);
@@ -149,12 +178,54 @@ export default function BulkCancelPage() {
     }
   }, [selectedProgram, reason]);
 
+  // ─── Execute job (Milestone 3) ─────────────────────
+
+  const handleExecute = useCallback(async () => {
+    if (!selectedProgram || !reason.trim()) return;
+
+    setExecuting(true);
+    setError(null);
+    setConfirmModalOpen(false);
+
+    try {
+      // Step 1: Create the real job (dryRun: false)
+      // NOTE: :sessionId is a legacy param name — it maps to programId.
+      const created = await api.post<CreatedJob>(
+        `/admin/sessions/${selectedProgram.id}/bulk-cancel`,
+        { reason: reason.trim() },
+      );
+
+      // Step 2: Start the job
+      await api.post(`/admin/bulk-cancel-jobs/${created.id}/start`);
+
+      // Step 3: Fetch the completed summary
+      const summary = await api.get<JobSummary>(
+        `/admin/bulk-cancel-jobs/${created.id}`,
+      );
+      setJobResult(summary);
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setError({
+          message: e.message,
+          code: e.code,
+          requestId: e.requestId,
+        });
+      } else {
+        setError({ message: '일괄 취소 실행에 실패했습니다', code: null, requestId: null });
+      }
+    } finally {
+      setExecuting(false);
+    }
+  }, [selectedProgram, reason]);
+
   // ─── Reset ───────────────────────────────────────────
 
   const handleReset = () => {
     setSelectedProgram(null);
     setReason('');
     setDryRunResult(null);
+    setJobResult(null);
+    setConfirmModalOpen(false);
     setError(null);
   };
 
@@ -307,8 +378,8 @@ export default function BulkCancelPage() {
         </div>
       )}
 
-      {/* Step 3: Dry Run Result (preview only — execute belongs to Milestone 3) */}
-      {dryRunResult && (
+      {/* Step 3: Dry Run Result + Execute */}
+      {dryRunResult && !jobResult && (
         <div className="space-y-4">
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="font-medium mb-4">미리보기 결과</h3>
@@ -377,6 +448,103 @@ export default function BulkCancelPage() {
             <button
               onClick={handleReset}
               className="px-4 py-2 border rounded text-sm text-gray-700 hover:bg-gray-50"
+            >
+              처음으로
+            </button>
+            <button
+              onClick={() => setConfirmModalOpen(true)}
+              disabled={executing || dryRunResult.totalTargets === 0}
+              className="px-4 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {executing ? '실행 중...' : '일괄 취소 실행'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmModalOpen && dryRunResult && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow w-full max-w-lg p-6">
+            <h3 className="text-lg font-bold mb-4">일괄 취소 실행 확인</h3>
+            <div className="text-sm space-y-2 mb-4">
+              <div>
+                <span className="text-gray-500">프로그램:</span>{' '}
+                {selectedProgram?.title}
+              </div>
+              <div>
+                <span className="text-gray-500">대상 예약 수:</span>{' '}
+                <span className="font-semibold">{dryRunResult.totalTargets}건</span>
+              </div>
+              <div>
+                <span className="text-gray-500">환불 모드:</span>{' '}
+                <span className="font-mono text-xs">{dryRunResult.mode}</span>
+              </div>
+            </div>
+            <div className="bg-red-50 border border-red-200 text-red-800 rounded p-3 text-sm mb-6">
+              이 작업은 되돌릴 수 없습니다. 대상 예약이 모두 취소되고 환불이 진행됩니다.
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmModalOpen(false)}
+                className="px-4 py-2 border rounded text-sm text-gray-700 hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleExecute}
+                className="px-4 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+              >
+                확인, 실행합니다
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Step 4: Job Result */}
+      {jobResult && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="font-medium mb-4">실행 결과</h3>
+            <div className="text-sm space-y-2">
+              <div>
+                <span className="text-gray-500">프로그램:</span>{' '}
+                {jobResult.program?.title ?? selectedProgram?.title}
+              </div>
+              <div>
+                <span className="text-gray-500">상태:</span>{' '}
+                <span className={`px-2 py-0.5 rounded text-xs font-medium ${jobResult.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : jobResult.status === 'COMPLETED_WITH_ERRORS' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
+                  {jobResult.status}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-500">전체 대상:</span>{' '}
+                {jobResult.totalTargets}건
+              </div>
+              <div>
+                <span className="text-gray-500">성공:</span>{' '}
+                <span className="text-green-700 font-medium">{jobResult.successCount}건</span>
+              </div>
+              <div>
+                <span className="text-gray-500">실패:</span>{' '}
+                <span className={jobResult.failedCount > 0 ? 'text-red-700 font-medium' : ''}>{jobResult.failedCount}건</span>
+              </div>
+              <div>
+                <span className="text-gray-500">건너뜀:</span>{' '}
+                {jobResult.skippedCount}건
+              </div>
+              <div>
+                <span className="text-gray-500">Job ID:</span>{' '}
+                <span className="font-mono text-xs">{jobResult.id}</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <button
+              onClick={handleReset}
+              className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
             >
               처음으로
             </button>
