@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -6,7 +6,7 @@ import AdminLayout from '@/components/AdminLayout';
 import Pagination from '@/components/Pagination';
 import { api, ApiError } from '@/services/api';
 
-// ─── Types ───────────────────────────────────────────
+// --- Types -------------------------------------------
 
 interface Program {
   id: string;
@@ -93,12 +93,12 @@ interface ErrorState {
   requestId: string | null;
 }
 
-// ─── Constants ───────────────────────────────────────
+// --- Constants ---------------------------------------
 
 const REFUND_PREVIEW_LIMIT = 20;
 const DEFAULT_ITEMS_PAGE_SIZE = 20;
 
-// ─── Component ───────────────────────────────────────
+// --- Component ---------------------------------------
 
 export default function BulkCancelPage() {
   const searchParams = useSearchParams();
@@ -137,7 +137,7 @@ export default function BulkCancelPage() {
   // Tracks the last failed action so the error panel retry re-issues the identical request
   const [lastFailedAction, setLastFailedAction] = useState<(() => void) | null>(null);
 
-  // ─── URL → state restore (on mount) ─────────────────
+  // --- URL → state restore (on mount) -----------------
 
   useEffect(() => {
     if (initializedFromUrl.current) return;
@@ -168,7 +168,7 @@ export default function BulkCancelPage() {
     restoreJob();
   }, [searchParams]);
 
-  // ─── State → URL sync (replace, not push) ──────────
+  // --- State → URL sync (replace, not push) ----------
 
   useEffect(() => {
     if (!jobResult) return;
@@ -183,7 +183,7 @@ export default function BulkCancelPage() {
     router.replace(target, { scroll: false });
   }, [jobResult, itemsPage, resultFilter, router]);
 
-  // ─── Fetch programs ──────────────────────────────────
+  // --- Fetch programs ----------------------------------
 
   const fetchPrograms = useCallback(async () => {
     setLoadingPrograms(true);
@@ -219,7 +219,7 @@ export default function BulkCancelPage() {
     fetchPrograms();
   }, [fetchPrograms]);
 
-  // ─── Search with debounce ────────────────────────────
+  // --- Search with debounce ----------------------------
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -229,7 +229,7 @@ export default function BulkCancelPage() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // ─── Submit dry run ──────────────────────────────────
+  // --- Submit dry run ----------------------------------
 
   const handleDryRun = useCallback(async () => {
     if (!selectedProgram) return;
@@ -268,7 +268,7 @@ export default function BulkCancelPage() {
     }
   }, [selectedProgram, reason]);
 
-  // ─── Execute job (Milestone 3) ─────────────────────
+  // --- Execute job (Milestone 3) ---------------------
 
   const handleExecute = useCallback(async () => {
     if (!selectedProgram || !reason.trim()) return;
@@ -310,7 +310,7 @@ export default function BulkCancelPage() {
     }
   }, [selectedProgram, reason]);
 
-  // ─── Fetch job items (Milestone 4) ─────────────────
+  // --- Fetch job items (Milestone 4) -----------------
 
   const fetchJobItems = useCallback(async (jobId: string, page: number, filter: string) => {
     setLoadingItems(true);
@@ -350,7 +350,7 @@ export default function BulkCancelPage() {
     }
   }, [jobResult, itemsPage, resultFilter, fetchJobItems]);
 
-  // ─── Retry failed items (Milestone 4) ────────────
+  // --- Retry failed items (Milestone 4) ------------
 
   const handleRetry = useCallback(async () => {
     if (!jobResult) return;
@@ -381,7 +381,7 @@ export default function BulkCancelPage() {
     }
   }, [jobResult]);
 
-  // ─── Reset ───────────────────────────────────────────
+  // --- Reset -------------------------------------------
 
   const handleReset = () => {
     setSelectedProgram(null);
@@ -398,7 +398,7 @@ export default function BulkCancelPage() {
     router.replace('/bulk-cancel', { scroll: false });
   };
 
-  // ─── Render ──────────────────────────────────────────
+  // --- Render ------------------------------------------
 
   return (
     <AdminLayout>
