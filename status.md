@@ -1,8 +1,8 @@
 # 숲똑 (SoopTalk) — 프로젝트 현황
 
-> 최종 업데이트: 2026-02-14
-> 빌드 상태: `tsc --noEmit` PASS, `jest` 141/147 PASS (6 pre-existing)
-> 커밋: `ab34df0` (main)
+> 최종 업데이트: 2026-02-15
+> 빌드 상태: `tsc --noEmit` PASS (server + admin)
+> 커밋: `b458687` (main)
 
 ---
 
@@ -15,7 +15,7 @@
 | Phase 2 | 결제 모듈 (PortOne) + 출석 체크 | 완료 |
 | Phase 3 | 알림 자동화 (FCM/Cron) + 사진첩 (S3/sharp) | 완료 |
 | Phase 4 | 정산 시스템 + 어드민 API | 완료 |
-| Phase 5 | 어드민 대시보드 (프론트엔드) | **미착수** |
+| Phase 5 | 어드민 대시보드 (프론트엔드) | **진행 중** |
 
 ---
 
@@ -33,6 +33,7 @@
 | Sprint 13 | Atomic Schedule Capacity (remaining_capacity) | **완료** |
 | Sprint 14 | Admin Readiness Hardening | **완료** |
 | Sprint 15 | Structured Error & Observability | **완료** |
+| Sprint 16 | Admin Dashboard UI Foundation | **완료** |
 
 ---
 
@@ -348,8 +349,61 @@ Phase 5 (어드민 대시보드 프론트엔드) 진입 전 어드민 API 계약
 
 ---
 
+## Sprint 16 — Admin Dashboard UI Foundation (완료)
+
+### 개요
+어드민 대시보드 프론트엔드(Next.js 14 App Router) Phase 5 첫 스프린트. 강사 관리 + 일괄 취소 UI 구현.
+
+### CP 진행
+
+| CP | 내용 | 상태 |
+|----|------|------|
+| CP0 | `GET /admin/instructors/:id` 엔드포인트 | 완료 |
+| CP1 | Admin API 클라이언트 Sprint 15 에러 envelope 정렬 | 완료 |
+| CP2 | Sidebar 업데이트 (강사 관리 + 일괄 취소 메뉴) | 완료 |
+| CP3 | `/instructors` 목록 페이지 | 완료 |
+| CP4 | `/instructors/[id]` 상세 페이지 | 완료 |
+| CP5 M2 | `/bulk-cancel` 최소 UI + dry-run 미리보기 | 완료 |
+| CP5 M3 | 일괄 취소 실행 (확인 모달 + Job 요약) | 완료 |
+| CP5 M4 | Job items 페이지네이션 + retry | **다음 스프린트로 이연** |
+
+### 주요 설계 결정
+
+| 결정 | 이유 |
+|------|------|
+| 백엔드 변경 없음 | 기존 어드민 API 엔드포인트만 사용 |
+| `:sessionId` 경로 파라미터 그대로 사용 | 백엔드 레거시 네이밍 — 실제로는 programId 매핑 |
+| 서버 dryRun 활용 | 백엔드에서 `dryRun: true` 네이티브 지원 확인 |
+| 단일 페이지 워크플로우 | `/bulk-cancel` 내에서 선택→미리보기→실행→결과 단계 전환 |
+| `ApiError.code` 기반 분기 | `error.message` 의존 금지 |
+| `requestId` 항상 표시 | 에러 패널에 code + requestId 노출 |
+| `limit` vs `pageSize` 구분 | `/admin/programs`는 `limit`, `/admin/bulk-cancel-jobs/:id/items`는 `pageSize` |
+
+### API 엔드포인트 사용
+
+| Method | Endpoint | 용도 |
+|--------|----------|------|
+| GET | `/admin/programs?page=&limit=&search=` | 프로그램 목록 (일괄 취소 대상 선택) |
+| POST | `/admin/sessions/:sessionId/bulk-cancel` | 일괄 취소 작업 생성 (dryRun 포함) |
+| POST | `/admin/bulk-cancel-jobs/:jobId/start` | 작업 실행 |
+| GET | `/admin/bulk-cancel-jobs/:jobId` | 작업 요약 조회 |
+
+### 변경 파일
+
+**신규 (1개):**
+- `apps/admin/src/app/bulk-cancel/page.tsx` — 일괄 취소 전체 워크플로우
+
+**수정 (1개):**
+- `.gitignore` — `.claude/` 추가
+
+**스펙 (2개):**
+- `specs/sprint-16-admin-dashboard-ui-foundation/SSOT.md` — 신규 (리네임)
+- `specs/sprint-16-admin-dashboard-ui-foundation/SPEC_SPRINT16_SSOT.md` — 삭제 (통합)
+
+---
+
 ## 다음 단계
 
-- **Phase 5**: 어드민 대시보드 프론트엔드 (Next.js) — 미착수
+- **Sprint 17**: CP5 M4 (Job items 페이지네이션 + retry) + 어드민 메트릭 대시보드
 - Redis 분산 락 제거 검토 (remaining_capacity로 대체 가능)
 - DB 마이그레이션 적용: `npx prisma migrate deploy` 필요
