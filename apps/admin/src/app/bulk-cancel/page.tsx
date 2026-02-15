@@ -244,7 +244,7 @@ export default function BulkCancelPage() {
 
     try {
       // NOTE: The backend route is POST /admin/sessions/:sessionId/bulk-cancel
-      // but :sessionId is a legacy param name — it actually maps to programId.
+      // but :sessionId is a legacy param name - it actually maps to programId.
       // In the backend, BulkCancelJob.sessionId references Program.id via Prisma relation.
       const result = await api.post<DryRunResult>(
         `/admin/sessions/${selectedProgram.id}/bulk-cancel`,
@@ -279,7 +279,7 @@ export default function BulkCancelPage() {
 
     try {
       // Step 1: Create the real job (dryRun: false)
-      // NOTE: :sessionId is a legacy param name — it maps to programId.
+      // NOTE: :sessionId is a legacy param name - it maps to programId.
       const created = await api.post<CreatedJob>(
         `/admin/sessions/${selectedProgram.id}/bulk-cancel`,
         { reason: reason.trim() },
@@ -404,7 +404,7 @@ export default function BulkCancelPage() {
     <AdminLayout>
       <h2 className="text-xl font-bold mb-6">일괄 취소</h2>
 
-      {/* Error Panel — always shows message/code/requestId per envelope contract */}
+      {/* Error Panel - always shows message/code/requestId per envelope contract */}
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-800 rounded p-4 text-sm mb-6">
           <div className="font-medium">오류</div>
@@ -461,7 +461,7 @@ export default function BulkCancelPage() {
                       <tr key={p.id}>
                         <td className="px-4 py-3">{p.title}</td>
                         <td className="px-4 py-3">
-                          {p.instructor?.name ?? '—'}
+                          {p.instructor?.name ?? '-'}
                         </td>
                         <td className="px-4 py-3">
                           <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
@@ -511,7 +511,7 @@ export default function BulkCancelPage() {
               </div>
               <div>
                 <span className="text-gray-500">강사:</span>{' '}
-                {selectedProgram.instructor?.name ?? '—'}
+                {selectedProgram.instructor?.name ?? '-'}
               </div>
               <div>
                 <span className="text-gray-500">ID:</span>{' '}
@@ -737,7 +737,7 @@ export default function BulkCancelPage() {
             </button>
           </div>
 
-          {/* Job Items — filter + table + pagination */}
+          {/* Job Items - filter + table + pagination */}
           <div className="space-y-3">
             <div className="flex items-center gap-3">
               <h3 className="font-medium">항목 상세</h3>
@@ -786,13 +786,13 @@ export default function BulkCancelPage() {
                             {item.reservation.totalPrice.toLocaleString('ko-KR')}원
                           </td>
                           <td className="px-4 py-3">
-                            {item.refundedAmount != null ? `${item.refundedAmount.toLocaleString('ko-KR')}원` : '—'}
+                            {item.refundedAmount != null ? `${item.refundedAmount.toLocaleString('ko-KR')}원` : '-'}
                           </td>
                           <td className="px-4 py-3">
                             {item.notificationSent ? '발송' : '미발송'}
                           </td>
                           <td className="px-4 py-3 text-xs text-gray-500">
-                            {item.failureCode ? `${item.failureCode}: ${item.failureMessage ?? ''}` : '—'}
+                            {item.failureCode ? `${item.failureCode}: ${item.failureMessage ?? ''}` : '-'}
                           </td>
                         </tr>
                       ))}
