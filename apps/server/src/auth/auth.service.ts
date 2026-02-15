@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { KakaoLoginDto } from './dto/kakao-login.dto';
+import { generateUniqueSlug } from '../public/slug.utils';
 
 interface KakaoUserInfo {
   id: number;
@@ -56,6 +57,17 @@ export class AuthService {
             instructorStatus: role === 'INSTRUCTOR' ? 'APPLIED' : 'NONE',
           },
         });
+
+        // Generate slug after creation (uses persisted user.id for suffix)
+        try {
+          const slug = await generateUniqueSlug(this.prisma, user.name, user.id);
+          user = await this.prisma.user.update({
+            where: { id: user.id },
+            data: { slug },
+          });
+        } catch {
+          // Slug generation is best-effort; user creation still succeeds
+        }
       }
     }
 

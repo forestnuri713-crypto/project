@@ -141,6 +141,7 @@ model User {
   instructorStatus       InstructorStatus @default(NONE) @map("instructor_status")
   instructorStatusReason String?          @map("instructor_status_reason")
   certifications         Json             @default("[]")
+  slug                   String?          @unique
   createdAt              DateTime         @default(now()) @map("created_at")
   updatedAt              DateTime         @updatedAt @map("updated_at")
 
