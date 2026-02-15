@@ -2,7 +2,7 @@
 
 > 최종 업데이트: 2026-02-15
 > 빌드 상태: `tsc --noEmit` PASS (server + admin)
-> 커밋: `a473f2b` (sprint-17/cp5-m4-items-pagination)
+> 커밋: `7cfefb4` (sprint-20/slug-strategy-m3)
 
 ---
 
@@ -39,6 +39,7 @@
 | Sprint 19 | Admin Visibility + Observability | 완료 |
 | Sprint 20 M1 | Public Instructor Profile Skeleton | 완료 |
 | Sprint 20 M2 | Slug Strategy | 완료 |
+| Sprint 20 M3 | One-Time Slug Update | 완료 |
 
 ---
 
@@ -532,6 +533,45 @@ Human-readable slug 도입. UUID 기반 기존 링크와 backward compatibility 
 - 예약 시스템 코드/테스트: **무변경** (git diff 확인)
 - Local DB migration: PASS
 - Backfill dry-run: verified
+
+---
+
+## Sprint 20 — M3 One-Time Slug Update (완료)
+
+### 개요
+승인된 강사가 자신의 slug를 1회 커스텀 변경할 수 있는 `PATCH /instructor/slug` 엔드포인트. Race-safe `updateMany` + slug 정규화.
+
+### 주요 변경
+
+| 항목 | 내용 |
+|------|------|
+| `User.slugChangeCount` | `Int @default(0)` — 변경 횟수 추적 |
+| `PATCH /instructor/slug` | JwtAuthGuard, UpdateSlugDto (regex + min/max length) |
+| Race safety | `updateMany` with `{ slugChangeCount: { lt: 1 }, instructorStatus: 'APPROVED' }` |
+| Slug 정규화 | `toLowerCase()` → 반복 하이픈 병합 → 앞뒤 하이픈 제거 |
+| 에러 코드 | 404 USER_NOT_FOUND, 403 INSTRUCTOR_NOT_APPROVED, 400 SLUG_CHANGE_EXHAUSTED/SLUG_UNCHANGED, 409 SLUG_TAKEN |
+| 예약 시스템 | **무변경** (테스트 mock만 수정) |
+
+### 변경 파일
+
+**신규 (6개):**
+- `apps/server/src/instructor/instructor.module.ts`
+- `apps/server/src/instructor/instructor.controller.ts`
+- `apps/server/src/instructor/instructor.service.ts`
+- `apps/server/src/instructor/dto/update-slug.dto.ts`
+- `apps/server/src/prisma/migrations/20260218000000_add_slug_change_count/migration.sql`
+- `apps/server/test/instructor-slug-update.spec.ts` — 10개 테스트
+
+**수정 (4개):**
+- `apps/server/src/prisma/schema.prisma` — slugChangeCount 추가
+- `apps/server/src/app.module.ts` — InstructorModule import
+- `apps/server/test/reservation-cancel.spec.ts` — tx mock 수정 (findUnique/updateMany)
+- `apps/server/test/reservation-schedule.spec.ts` — $executeRaw mock 수정 (schedule vs program 구분)
+
+### 검증 결과
+- `prisma generate`: PASS
+- `tsc --noEmit`: PASS
+- `jest`: 21 suites, 181 tests — ALL PASS
 
 ---
 
