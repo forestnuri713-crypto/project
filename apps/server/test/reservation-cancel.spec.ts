@@ -19,6 +19,7 @@ describe('ReservationsService - cancel', () => {
       participantCount: 2,
       totalPrice: 20000,
       status: 'CONFIRMED',
+      programScheduleId: 'sch-1',
       program: {
         id: 'prog-1',
         title: 'Test Program',
@@ -37,19 +38,24 @@ describe('ReservationsService - cancel', () => {
 
     const txProxy: any = {
       reservation: {
-        update: jest.fn().mockImplementation((args: any) =>
-          Promise.resolve({
-            id: args.where.id,
-            ...args.data,
-            program: { id: 'prog-1', title: 'Test Program', scheduleAt: futureDate },
-          }),
-        ),
+        findUnique: jest.fn().mockImplementation(() => {
+          // Re-use whatever the outer findUnique was set to return
+          return mockPrisma.reservation.findUnique();
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       $executeRaw: jest.fn().mockImplementation((...args: any[]) => {
+        const sql = Array.isArray(args[0]) ? args[0].join('') : String(args[0]);
         const delta = args[1];
+        if (sql.includes('program_schedules')) {
+          // Schedule-level capacity restore — fails when nothing to restore
+          if (typeof delta === 'number' && reservedCount - delta < 0) {
+            return Promise.resolve(0);
+          }
+          return Promise.resolve(1);
+        }
+        // Program-level reserved_count decrement
         if (typeof delta !== 'number') return Promise.resolve(0);
-
-        // Decrement
         if (reservedCount - delta >= 0) {
           reservedCount -= delta;
           return Promise.resolve(1);
@@ -108,9 +114,9 @@ describe('ReservationsService - cancel', () => {
   });
 
   it('should throw INVARIANT_VIOLATION when decrement goes below zero', async () => {
-    // Set reservedCount to 0 so decrement will fail
+    // Set reservedCount to 0 so schedule increment $executeRaw returns 0
     reservedCount = 0;
-    const reservation = makeReservation({ participantCount: 2 });
+    const reservation = makeReservation({ participantCount: 2, programScheduleId: 'sch-1' });
     mockPrisma.reservation.findUnique.mockResolvedValue(reservation);
 
     await expect(service.cancel('res-1', 'user-1')).rejects.toMatchObject({
