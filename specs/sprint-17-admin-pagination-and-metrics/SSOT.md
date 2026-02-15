@@ -33,20 +33,22 @@ section) - NOT a separate `/admin/bulk-cancel-jobs/:jobId/items` route
 
 ------------------------------------------------------------------------
 
-## M2 --- Admin Metrics Dashboard (Read-only)
+## M2 --- Admin Metrics Dashboard (Read-only) ✅ DONE
 
-**Target** - `/admin/dashboard`
+**Route:** `/` (`apps/admin/src/app/page.tsx`) — NOT `/admin/dashboard`
 
-**Objectives** - Render metrics from existing GET
-/admin/dashboard/stats. - Display: - pendingInstructors - reservation
-stats - financial stats already provided - Consistent loading / empty /
-error states. - Show requestId on error.
+**M2-1 (skeleton + error handling):**
+- `GET /admin/dashboard/stats` contract confirmed (see `DASHBOARD_STATS_CONTRACT.md`)
+- Loading state implemented
+- Error panel shows `error.code` + `requestId`
+- Retry button re-fetches stats
+- No backend changes
 
-**Guardrails** - No new stats aggregation. - No backend aggregation
-change. - Pure presentation layer only.
-
-**Acceptance Criteria** - Dashboard renders stable on reload. - Error
-envelope respected. - Zero backend diff.
+**M2-2 (metric cards):**
+- All 5 fields rendered as cards: totalUsers, totalReservations, totalRevenue, pendingPrograms, pendingInstructors
+- Consistent `toLocaleString()` formatting on all values
+- Responsive grid layout (1/2/3 columns)
+- No charts, no derived metrics, no new abstractions
 
 ------------------------------------------------------------------------
 
