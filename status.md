@@ -1,8 +1,8 @@
 # 숲똑 (SoopTalk) — 프로젝트 현황
 
-> 최종 업데이트: 2026-02-15
+> 최종 업데이트: 2026-02-16
 > 빌드 상태: `tsc --noEmit` PASS (server + admin)
-> 커밋: `7cfefb4` (sprint-20/slug-strategy-m3)
+> 커밋: `fea5e44` (sprint-20/slug-strategy-m4)
 
 ---
 
@@ -40,6 +40,7 @@
 | Sprint 20 M1 | Public Instructor Profile Skeleton | 완료 |
 | Sprint 20 M2 | Slug Strategy | 완료 |
 | Sprint 20 M3 | One-Time Slug Update | 완료 |
+| Sprint 20 M4 | Slug History Redirects | 완료 |
 
 ---
 
@@ -572,6 +573,50 @@ Human-readable slug 도입. UUID 기반 기존 링크와 backward compatibility 
 - `prisma generate`: PASS
 - `tsc --noEmit`: PASS
 - `jest`: 21 suites, 181 tests — ALL PASS
+
+---
+
+## Sprint 20 — M4 Slug History Redirects (완료)
+
+### 개요
+강사가 slug를 변경한 후 이전 URL(`/public/instructors/{old-slug}`)이 404가 되는 문제 해결. 이전 slug를 `slug_histories` 테이블에 기록하고, 현재 slug로 308 Permanent Redirect 반환.
+
+### 주요 변경
+
+| 항목 | 내용 |
+|------|------|
+| `SlugHistory` 모델 | `id`, `userId`, `slug` (@unique), `createdAt` — `slug_histories` 테이블 |
+| `InstructorService.updateSlug` | `prisma.$transaction`으로 래핑 — slug 변경 시 이전 slug를 `slugHistory.create`로 원자적 기록 |
+| `PublicService.getInstructorProfile` | slug 조회 실패 시 `slugHistory` fallback — APPROVED 상태인 경우만 `{ redirect: newSlug }` 반환 |
+| UUID 조회 | slug history 미참조 (기존 동작 유지) |
+| 체인 해결 | 별도 처리 불필요 — history → user.slug (현재값) 자동 해결 |
+| 예약 시스템 | **무변경** |
+
+### 에러 처리
+
+| 시나리오 | 결과 |
+|----------|------|
+| 현재 slug 조회 | 기존 동작 (프로필 반환) |
+| 이전 slug 조회 + APPROVED | 308 redirect → 현재 slug |
+| 이전 slug 조회 + NOT APPROVED | 404 |
+| 알 수 없는 slug | 404 |
+
+### 변경 파일
+
+**신규 (2개):**
+- `apps/server/src/prisma/migrations/20260219000000_add_slug_history/migration.sql`
+- `apps/server/test/slug-history-redirect.spec.ts` — 8개 테스트 (PublicService 6 + InstructorService 2)
+
+**수정 (5개):**
+- `apps/server/src/prisma/schema.prisma` — SlugHistory 모델 + User 관계 추가
+- `apps/server/src/instructor/instructor.service.ts` — $transaction + slugHistory.create
+- `apps/server/src/public/public.service.ts` — slugHistory fallback 추가
+- `apps/server/test/instructor-slug-update.spec.ts` — transaction mock 패턴 적용
+- `apps/server/test/public-instructor-profile.spec.ts` — slugHistory mock 추가
+
+### 검증 결과
+- `prisma db push`: PASS
+- `jest`: 22 suites, 189 tests — ALL PASS
 
 ---
 

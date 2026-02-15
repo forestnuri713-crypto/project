@@ -25,6 +25,9 @@ describe('PublicService - getInstructorProfile', () => {
         findUnique: jest.fn(),
         findFirst: jest.fn(),
       },
+      slugHistory: {
+        findUnique: jest.fn(),
+      },
     };
     service = new PublicService(mockPrisma);
   });

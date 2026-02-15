@@ -9,6 +9,7 @@ import {
 describe('InstructorService – updateSlug', () => {
   let service: InstructorService;
   let mockPrisma: any;
+  let mockTx: any;
 
   const approvedUser = {
     id: 'user-1',
@@ -18,23 +19,29 @@ describe('InstructorService – updateSlug', () => {
   };
 
   beforeEach(() => {
-    mockPrisma = {
+    mockTx = {
       user: {
         findUnique: jest.fn(),
-        updateMany: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
+      slugHistory: {
+        create: jest.fn(),
+      },
+    };
+
+    mockPrisma = {
+      $transaction: jest.fn((cb: (tx: any) => Promise<any>) => cb(mockTx)),
     };
     service = new InstructorService(mockPrisma);
   });
 
   it('success: APPROVED user with slugChangeCount=0 updates slug', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue(approvedUser);
-    mockPrisma.user.updateMany.mockResolvedValue({ count: 1 });
+    mockTx.user.findUnique.mockResolvedValue(approvedUser);
 
     const result = await service.updateSlug('user-1', 'new-slug');
 
     expect(result).toEqual({ success: true, data: { slug: 'new-slug' } });
-    expect(mockPrisma.user.updateMany).toHaveBeenCalledWith({
+    expect(mockTx.user.updateMany).toHaveBeenCalledWith({
       where: {
         id: 'user-1',
         slugChangeCount: { lt: 1 },
@@ -45,13 +52,13 @@ describe('InstructorService – updateSlug', () => {
   });
 
   it('404: user not found', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue(null);
+    mockTx.user.findUnique.mockResolvedValue(null);
 
     await expect(service.updateSlug('no-user', 'slug')).rejects.toThrow(NotFoundException);
   });
 
   it('403: user not APPROVED', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue({
+    mockTx.user.findUnique.mockResolvedValue({
       ...approvedUser,
       instructorStatus: 'APPLIED',
     });
@@ -60,7 +67,7 @@ describe('InstructorService – updateSlug', () => {
   });
 
   it('400 SLUG_CHANGE_EXHAUSTED: slugChangeCount >= 1', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue({
+    mockTx.user.findUnique.mockResolvedValue({
       ...approvedUser,
       slugChangeCount: 1,
     });
@@ -69,28 +76,26 @@ describe('InstructorService – updateSlug', () => {
   });
 
   it('400 SLUG_UNCHANGED: new slug same as current', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue(approvedUser);
+    mockTx.user.findUnique.mockResolvedValue(approvedUser);
 
     await expect(service.updateSlug('user-1', 'old-slug')).rejects.toThrow(BadRequestException);
   });
 
   it('400 SLUG_CHANGE_EXHAUSTED on race condition (updateMany count=0)', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue(approvedUser);
-    mockPrisma.user.updateMany.mockResolvedValue({ count: 0 });
+    mockTx.user.findUnique.mockResolvedValue(approvedUser);
+    mockTx.user.updateMany.mockResolvedValue({ count: 0 });
 
     await expect(service.updateSlug('user-1', 'new-slug')).rejects.toThrow(BadRequestException);
   });
 
   it('409 SLUG_TAKEN: Prisma P2002 unique constraint', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue(approvedUser);
-    mockPrisma.user.updateMany.mockRejectedValue({ code: 'P2002' });
+    mockPrisma.$transaction.mockRejectedValue({ code: 'P2002' });
 
     await expect(service.updateSlug('user-1', 'taken-slug')).rejects.toThrow(ConflictException);
   });
 
   it('normalizes to lowercase', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue(approvedUser);
-    mockPrisma.user.updateMany.mockResolvedValue({ count: 1 });
+    mockTx.user.findUnique.mockResolvedValue(approvedUser);
 
     const result = await service.updateSlug('user-1', 'My-Slug');
 
@@ -98,8 +103,7 @@ describe('InstructorService – updateSlug', () => {
   });
 
   it('collapses repeated hyphens', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue(approvedUser);
-    mockPrisma.user.updateMany.mockResolvedValue({ count: 1 });
+    mockTx.user.findUnique.mockResolvedValue(approvedUser);
 
     const result = await service.updateSlug('user-1', 'my---slug');
 
@@ -107,8 +111,7 @@ describe('InstructorService – updateSlug', () => {
   });
 
   it('trims leading and trailing hyphens', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue(approvedUser);
-    mockPrisma.user.updateMany.mockResolvedValue({ count: 1 });
+    mockTx.user.findUnique.mockResolvedValue(approvedUser);
 
     const result = await service.updateSlug('user-1', '-my-slug-');
 
