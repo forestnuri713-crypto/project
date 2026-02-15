@@ -1,4 +1,6 @@
 import { notFound } from 'next/navigation';
+import { cache } from 'react';
+import type { Metadata } from 'next';
 import { fetchPublicApi, ApiError } from '@/lib/api';
 
 interface Certification {
@@ -24,7 +26,7 @@ interface ApiResponse {
   data: InstructorProfile;
 }
 
-async function getInstructorProfile(slug: string): Promise<InstructorProfile | null> {
+const getInstructorProfile = cache(async (slug: string): Promise<InstructorProfile | null> => {
   try {
     const res = await fetchPublicApi<ApiResponse>(`/public/instructors/${encodeURIComponent(slug)}`);
     return res.data;
@@ -34,6 +36,52 @@ async function getInstructorProfile(slug: string): Promise<InstructorProfile | n
     }
     throw err;
   }
+});
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || '';
+const BRAND = '숲똑';
+const FALLBACK_DESCRIPTION = '숲체험 강사 소개 페이지입니다.';
+
+function truncate(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  return text.slice(0, maxLen - 1) + '…';
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: { slug: string };
+}): Promise<Metadata> {
+  const profile = await getInstructorProfile(params.slug);
+
+  if (!profile) {
+    return { title: `강사 소개 | ${BRAND}` };
+  }
+
+  const title = `${profile.displayName} | ${BRAND}`;
+  const description = truncate(
+    profile.bio || FALLBACK_DESCRIPTION,
+    160,
+  );
+  const canonicalPath = `/instructors/${profile.slug}`;
+  const canonicalUrl = SITE_URL ? `${SITE_URL}${canonicalPath}` : canonicalPath;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: canonicalUrl,
+      type: 'profile',
+      ...(profile.profileImageUrl
+        ? { images: [{ url: profile.profileImageUrl }] }
+        : {}),
+    },
+    alternates: {
+      canonical: canonicalUrl,
+    },
+  };
 }
 
 export default async function InstructorProfilePage({

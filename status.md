@@ -41,6 +41,7 @@
 | Sprint 20 M2 | Slug Strategy | 완료 |
 | Sprint 20 M3 | One-Time Slug Update | 완료 |
 | Sprint 20 M4 | Slug History Redirects | 완료 |
+| Sprint 21 M1 | SEO Meta Foundation (apps/web / instructors slug meta) | 완료 |
 
 ---
 
@@ -624,3 +625,40 @@ Human-readable slug 도입. UUID 기반 기존 링크와 backward compatibility 
 
 - Redis 분산 락 제거 검토 (remaining_capacity로 대체 가능)
 - DB 마이그레이션 적용: `npx prisma migrate deploy` 필요
+
+---
+
+## Sprint 21 — M1 SEO Meta Foundation (완료)
+
+### 개요
+Public Instructor Profile(`/instructors/[slug]`) 페이지에 동적 SEO 메타(title, description, OpenGraph, canonical URL) 구현.
+Backend/DB/예약 시스템은 변경하지 않으며, 기존 redirect 및 APPROVED 로직을 그대로 유지한다.
+
+### 주요 변경
+
+| 항목 | 내용 |
+|------|------|
+| `generateMetadata()` | Next.js App Router 메타데이터 함수 — SSR 시점에 동적 메타 생성 |
+| Title | `{displayName} \| 숲똑` (fallback: `강사 소개 \| 숲똑`) |
+| Description | `bio` 필드 (없으면 `숲체험 강사 소개 페이지입니다.`), 160자 truncate |
+| OpenGraph | `og:title`, `og:description`, `og:url`, `og:type=profile`, `og:image` (프로필 이미지 있을 때) |
+| Canonical | `NEXT_PUBLIC_SITE_URL` + `/instructors/{slug}` (env 없으면 path-only) |
+| 데이터 재사용 | React `cache()` 래핑 — `generateMetadata`와 page 컴포넌트가 동일 fetch 공유 |
+| Redirect 보존 | metadata에서는 fallback 반환만, `notFound()`는 기존 page 로직에서만 호출 |
+
+### 변경 파일
+
+**수정 (1개):**
+- `apps/web/src/app/instructors/[slug]/page.tsx` — `generateMetadata` 추가, `getInstructorProfile`을 `cache()` 래핑
+
+### 검증 결과
+
+| 케이스 | 결과 |
+|--------|------|
+| APPROVED instructor slug | title/desc/OG/canonical SSR 렌더링 |
+| 미존재 slug | fallback title + `notFound()` (기존 동일) |
+| 비승인 slug | backend 404 → fallback title + `notFound()` (기존 동일) |
+
+- `next build`: PASS (Dynamic route 정상 컴파일)
+- Backend/DB/예약 모듈: **무변경**
+- APPROVED 로직: **변경 없음**
