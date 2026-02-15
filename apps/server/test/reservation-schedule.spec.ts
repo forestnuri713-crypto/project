@@ -53,7 +53,20 @@ describe('ReservationsService - ProgramSchedule integration', () => {
           return Promise.resolve({ ...res, program: { id: 'prog-1', title: 'Test', scheduleAt: new Date(), location: 'Seoul' } });
         }),
       },
-      $executeRaw: jest.fn().mockImplementation(() => {
+      $executeRaw: jest.fn().mockImplementation((...args: any[]) => {
+        const sql = Array.isArray(args[0]) ? args[0].join('') : String(args[0]);
+        if (sql.includes('program_schedules')) {
+          // Schedule-level capacity decrement
+          const participantCount = args[1];
+          const scheduleId = args[2];
+          const schedule = schedules.get(scheduleId);
+          if (!schedule) return Promise.resolve(0);
+          const remaining = (schedule.remainingCapacity ?? schedule.capacity) - participantCount;
+          if (remaining < 0) return Promise.resolve(0);
+          schedule.remainingCapacity = remaining;
+          return Promise.resolve(1);
+        }
+        // Program-level reserved_count (analytics)
         if (reservedCount < 10) {
           reservedCount++;
           return Promise.resolve(1);
