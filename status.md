@@ -2,7 +2,7 @@
 
 > 최종 업데이트: 2026-02-16
 > 빌드 상태: `tsc --noEmit` PASS (server + admin)
-> 커밋: `fea5e44` (sprint-20/slug-strategy-m4)
+> 커밋: `eca4ed1` (main)
 
 ---
 
