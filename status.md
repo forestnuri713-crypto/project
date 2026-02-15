@@ -2,7 +2,7 @@
 
 > 최종 업데이트: 2026-02-15
 > 빌드 상태: `tsc --noEmit` PASS (server + admin)
-> 커밋: `b458687` (main)
+> 커밋: `a473f2b` (sprint-17/cp5-m4-items-pagination)
 
 ---
 
@@ -15,7 +15,7 @@
 | Phase 2 | 결제 모듈 (PortOne) + 출석 체크 | 완료 |
 | Phase 3 | 알림 자동화 (FCM/Cron) + 사진첩 (S3/sharp) | 완료 |
 | Phase 4 | 정산 시스템 + 어드민 API | 완료 |
-| Phase 5 | 어드민 대시보드 (프론트엔드) | **진행 중** |
+| Phase 5 | 어드민 대시보드 (프론트엔드) | **완료 (Read-only 1차)** |
 
 ---
 
@@ -34,6 +34,9 @@
 | Sprint 14 | Admin Readiness Hardening | **완료** |
 | Sprint 15 | Structured Error & Observability | **완료** |
 | Sprint 16 | Admin Dashboard UI Foundation | **완료** |
+| Sprint 17 | Admin Pagination + Metrics Foundation | **완료** |
+| Sprint 18 | Dashboard Drill-down + Metrics Expansion (Read-only) | **완료** |
+| Sprint 19 | Admin Visibility + Observability | 진행 중 |
 
 ---
 
@@ -365,7 +368,7 @@ Phase 5 (어드민 대시보드 프론트엔드) 진입 전 어드민 API 계약
 | CP4 | `/instructors/[id]` 상세 페이지 | 완료 |
 | CP5 M2 | `/bulk-cancel` 최소 UI + dry-run 미리보기 | 완료 |
 | CP5 M3 | 일괄 취소 실행 (확인 모달 + Job 요약) | 완료 |
-| CP5 M4 | Job items 페이지네이션 + retry | **다음 스프린트로 이연** |
+| CP5 M4 | Job items 페이지네이션 + retry | **완료 (Sprint 17)** |
 
 ### 주요 설계 결정
 
@@ -402,8 +405,57 @@ Phase 5 (어드민 대시보드 프론트엔드) 진입 전 어드민 API 계약
 
 ---
 
+## Sprint 17 — Admin Pagination + Metrics Foundation (완료)
+
+### 개요
+Sprint 16에서 이연된 CP5 M4 (일괄 취소 항목 페이지네이션) 완료 + 대시보드 통계 카드 에러 처리 강화.
+
+### Milestone 진행
+
+| Milestone | 내용 | 상태 |
+|-----------|------|------|
+| M1 | CP5 M4: Job items 페이지네이션 + retry + URL sync | 완료 |
+| M2 | 대시보드 통계 카드 + 에러/retry 처리 | 완료 |
+
+### M1 — CP5 M4: Job Items Pagination + Retry
+
+- `GET /admin/bulk-cancel-jobs/:jobId/items` (page, pageSize, result 필터)
+- URL searchParams 동기화 (jobId, itemsPage, pageSize, resultFilter)
+- `router.replace` 사용 (히스토리 오염 방지)
+- URL 복원: 새로고침 시 jobId로 작업 요약 자동 복원
+- `POST /admin/bulk-cancel-jobs/:jobId/retry` + 요약/항목 새로고침
+- 페이지 클램핑: `itemsPage`가 `totalPages` 초과 시 자동 보정
+- Smoke Test: A/B/C/D PASS
+
+### M2 — Dashboard Stats Cards
+
+- `GET /admin/dashboard/stats` → 5개 메트릭 카드 (totalUsers, totalReservations, totalRevenue, pendingPrograms, pendingInstructors)
+- 에러 패널: `error.code` + `requestId` 표시 + 재시도 버튼
+- 대시보드 경로: `/` (`apps/admin/src/app/page.tsx`)
+
+### API 엔드포인트 사용
+
+| Method | Endpoint | 용도 |
+|--------|----------|------|
+| GET | `/admin/bulk-cancel-jobs/:jobId/items?page=&pageSize=&result=` | 작업 항목 조회 (페이지네이션) |
+| POST | `/admin/bulk-cancel-jobs/:jobId/retry` | 실패 항목 재시도 |
+| GET | `/admin/dashboard/stats` | 대시보드 통계 |
+
+### 변경 파일
+
+**수정 (2개):**
+- `apps/admin/src/app/bulk-cancel/page.tsx` — 항목 테이블 + 페이지네이션 + URL sync + retry
+- `apps/admin/src/app/page.tsx` — 에러 처리 + retry + 로딩 상태
+
+**스펙 (3개):**
+- `specs/sprint-17-admin-pagination-and-metrics/SSOT.md`
+- `specs/sprint-17-admin-pagination-and-metrics/CP5_M4_CONTRACT.md`
+- `specs/sprint-17-admin-pagination-and-metrics/DASHBOARD_STATS_CONTRACT.md`
+
+---
+
 ## 다음 단계
 
-- **Sprint 17**: CP5 M4 (Job items 페이지네이션 + retry) + 어드민 메트릭 대시보드
+- **Sprint 19** (진행 중): Admin Visibility + Observability (Read-only)
 - Redis 분산 락 제거 검토 (remaining_capacity로 대체 가능)
 - DB 마이그레이션 적용: `npx prisma migrate deploy` 필요
