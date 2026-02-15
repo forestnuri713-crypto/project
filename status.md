@@ -30,13 +30,13 @@
 | Sprint 10 | 예약 정합성 & 동시성 강화 | 완료 |
 | Sprint 11 | Payment Webhook 2-layer Idempotency | 완료 |
 | Sprint 12 | ProgramSchedule 도입 (회차 분리) | 완료 |
-| Sprint 13 | Atomic Schedule Capacity (remaining_capacity) | **완료** |
-| Sprint 14 | Admin Readiness Hardening | **완료** |
-| Sprint 15 | Structured Error & Observability | **완료** |
-| Sprint 16 | Admin Dashboard UI Foundation | **완료** |
-| Sprint 17 | Admin Pagination + Metrics Foundation | **완료** |
-| Sprint 18 | Dashboard Drill-down + Metrics Expansion (Read-only) | **완료** |
-| Sprint 19 | Admin Visibility + Observability | 진행 중 |
+| Sprint 13 | Atomic Schedule Capacity (remaining_capacity) | 완료 |
+| Sprint 14 | Admin Readiness Hardening | 완료 |
+| Sprint 15 | Structured Error & Observability | 완료 |
+| Sprint 16 | Admin Dashboard UI Foundation | 완료 |
+| Sprint 17 | Admin Pagination + Metrics Foundation | 완료 |
+| Sprint 18 | Dashboard Drill-down + Metrics Expansion (Read-only) | 완료 |
+| Sprint 19 | Admin Visibility + Observability | 완료 |
 
 ---
 
@@ -456,6 +456,6 @@ Sprint 16에서 이연된 CP5 M4 (일괄 취소 항목 페이지네이션) 완�
 
 ## 다음 단계
 
-- **Sprint 19** (진행 중): Admin Visibility + Observability (Read-only)
+- **Sprint 20** (예정): Admin Evolution Phase 2
 - Redis 분산 락 제거 검토 (remaining_capacity로 대체 가능)
 - DB 마이그레이션 적용: `npx prisma migrate deploy` 필요
