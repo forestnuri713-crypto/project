@@ -662,3 +662,12 @@ Backend/DB/예약 시스템은 변경하지 않으며, 기존 redirect 및 APPRO
 - `next build`: PASS (Dynamic route 정상 컴파일)
 - Backend/DB/예약 모듈: **무변경**
 - APPROVED 로직: **변경 없음**
+# #   R e p o   G u a r d r a i l s   ( v e r i f i e d   2 0 2 6 - 0 2 - 1 6 ) 
+ -   B r a n c h   p r o t e c t i o n :   m a i n 
+ -   R e q u i r e   s t a t u s   c h e c k s :   W e b   E 2 E   T e s t s   ( . g i t h u b / w o r k f l o w s / w e b - e 2 e . y m l ) 
+ -   R e q u i r e   c o n v e r s a t i o n   r e s o l u t i o n :   O N 
+ -   R e q u i r e   b r a n c h e s   t o   b e   u p   t o   d a t e   b e f o r e   m e r g i n g :   O N 
+ -   B l o c k   f o r c e   p u s h e s :   O N 
+ -   R e s t r i c t   d e l e t i o n s :   O N 
+  
+ 
