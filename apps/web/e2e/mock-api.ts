@@ -3,24 +3,27 @@ import * as http from 'node:http';
 const MOCK_PROFILE = {
   success: true,
   data: {
-    id: 'e2e-0000-0000-0000-000000000001',
+    id: 'e2e-id-1',
     slug: 'kim-forest-e2e',
     isPublic: true,
     displayName: '김숲E2E',
     profileImageUrl: null,
     coverImageUrl: null,
-    bio: 'E2E 테스트용 강사 프로필입니다.',
-    certifications: [{ title: '숲해설사', issuer: '산림청', issuedAt: '2025-01-01' }],
+    bio: 'E2E용 소개입니다.',
+    certifications: [],
     provider: null,
   },
 };
 
-const NOT_FOUND = { error: { message: 'Not Found', code: 'NOT_FOUND' } };
+const NOT_FOUND = {
+  success: false,
+  error: { code: 'NOT_FOUND', message: 'Not Found' },
+};
 
 export function startMockApi(port: number): Promise<http.Server> {
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
-      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
       if (req.url === '/public/instructors/kim-forest-e2e') {
         res.writeHead(200);
