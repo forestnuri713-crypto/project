@@ -2,7 +2,7 @@
 
 > 최종 업데이트: 2026-02-18
 > 빌드 상태: `tsc --noEmit` PASS (server + admin)
-> 커밋: `eca4ed1` (main)
+> 커밋: `5a2629c` (main)
 
 ---
 
@@ -696,12 +696,13 @@ apps/web 사이트맵 어댑터 연결(Sprint 24)을 위한 공개 강사 열거
 - `jest`: 23 suites, 199 tests — ALL PASS
 - 기존 `GET /public/instructors/:slug` 테스트: **무변경, 통과**
 - apps/web: **무변경**
-# #   R e p o   G u a r d r a i l s   ( v e r i f i e d   2 0 2 6 - 0 2 - 1 6 ) 
- -   B r a n c h   p r o t e c t i o n :   m a i n 
- -   R e q u i r e   s t a t u s   c h e c k s :   W e b   E 2 E   T e s t s   ( . g i t h u b / w o r k f l o w s / w e b - e 2 e . y m l ) 
- -   R e q u i r e   c o n v e r s a t i o n   r e s o l u t i o n :   O N 
- -   R e q u i r e   b r a n c h e s   t o   b e   u p   t o   d a t e   b e f o r e   m e r g i n g :   O N 
- -   B l o c k   f o r c e   p u s h e s :   O N 
- -   R e s t r i c t   d e l e t i o n s :   O N 
-  
- 
+# #   R e p o   G u a r d r a i l s   ( v e r i f i e d   2 0 2 6 - 0 2 - 1 6 ) 
+ -   B r a n c h   p r o t e c t i o n :   m a i n 
+ -   R e q u i r e   s t a t u s   c h e c k s :   W e b   E 2 E   T e s t s   ( . g i t h u b / w o r k f l o w s / w e b - e 2 e . y m l ) 
+ -   R e q u i r e   c o n v e r s a t i o n   r e s o l u t i o n :   O N 
+ -   R e q u i r e   b r a n c h e s   t o   b e   u p   t o   d a t e   b e f o r e   m e r g i n g :   O N 
+ -   B l o c k   f o r c e   p u s h e s :   O N 
+ -   R e s t r i c t   d e l e t i o n s :   O N 
+ 
+ 
+ 
