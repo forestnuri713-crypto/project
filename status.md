@@ -1,6 +1,6 @@
 # 숲똑 (SoopTalk) — 프로젝트 현황
 
-> 최종 업데이트: 2026-02-16
+> 최종 업데이트: 2026-02-18
 > 빌드 상태: `tsc --noEmit` PASS (server + admin)
 > 커밋: `eca4ed1` (main)
 
@@ -42,6 +42,7 @@
 | Sprint 20 M3 | One-Time Slug Update | 완료 |
 | Sprint 20 M4 | Slug History Redirects | 완료 |
 | Sprint 21 M1 | SEO Meta Foundation (apps/web / instructors slug meta) | 완료 |
+| Sprint 22 | SEO Expansion: Dynamic Sitemap Foundation (static-only, apps/web) | 완료 |
 
 ---
 
@@ -662,6 +663,45 @@ Backend/DB/예약 시스템은 변경하지 않으며, 기존 redirect 및 APPRO
 - `next build`: PASS (Dynamic route 정상 컴파일)
 - Backend/DB/예약 모듈: **무변경**
 - APPROVED 로직: **변경 없음**
+
+---
+
+## Sprint 22 — SEO Expansion: Dynamic Sitemap Foundation (완료)
+
+### 개요
+apps/web에 Next.js App Router 기반 sitemap 엔드포인트(`/sitemap.xml`) 구축. 현재는 정적 라우트(`/`)만 포함하며, 강사 URL은 list API 부재로 미포함. Source adapter 패턴으로 향후 확장 준비 완료.
+
+### M0 — Contract Validation
+- 강사 열거 엔드포인트 없음 확인 (`GET /public/instructors/:slug` 단건 조회만 존재)
+- SSOT `§5 Findings`에 결과 기록
+
+### 주요 변경
+
+| 항목 | 내용 |
+|------|------|
+| `app/sitemap.ts` | Next.js metadata route — 정적 URL(`/`) 반환, `revalidate = 3600` |
+| `lib/sitemap/types.ts` | `SitemapUrl` 타입 + `SitemapSourceAdapter` 인터페이스 |
+| `lib/sitemap/instructors.stub.ts` | 강사 어댑터 스텁 — `getUrls()` → `[]` (list API 부재) |
+| `lib/sitemap/runtime.ts` | `safeGetUrls()` — 2초 timeout + try/catch fallback, `SITEMAP_REVALIDATE_SECONDS` |
+| `e2e/sitemap.spec.ts` | Playwright smoke test — 200 + `<urlset` 검증 |
+
+### 변경 파일 (apps/web only, 6개)
+
+**신규 (5개):**
+- `apps/web/src/app/sitemap.ts`
+- `apps/web/src/lib/sitemap/types.ts`
+- `apps/web/src/lib/sitemap/instructors.stub.ts`
+- `apps/web/src/lib/sitemap/runtime.ts`
+- `apps/web/e2e/sitemap.spec.ts`
+
+**수정 (1개):**
+- `specs/sprint-22-seo-sitemap/Sprint_22_SSOT_SEO_Sitemap.md` — M0 Findings 기록
+
+### 검증 결과
+- `next build`: PASS (`/sitemap.xml` static route, 0 B JS)
+- `tsc --noEmit`: PASS
+- Playwright E2E: 3 passed (기존 2 + sitemap 1)
+- Backend/DB/shared: **무변경**
 # #   R e p o   G u a r d r a i l s   ( v e r i f i e d   2 0 2 6 - 0 2 - 1 6 ) 
  -   B r a n c h   p r o t e c t i o n :   m a i n 
  -   R e q u i r e   s t a t u s   c h e c k s :   W e b   E 2 E   T e s t s   ( . g i t h u b / w o r k f l o w s / w e b - e 2 e . y m l ) 
