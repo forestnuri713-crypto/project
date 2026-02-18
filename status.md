@@ -1,6 +1,6 @@
 # 숲똑 (SoopTalk) — 프로젝트 현황
 
-> 최종 업데이트: 2026-02-16
+> 최종 업데이트: 2026-02-18
 > 빌드 상태: `tsc --noEmit` PASS (server + admin)
 > 커밋: `eca4ed1` (main)
 
@@ -42,6 +42,7 @@
 | Sprint 20 M3 | One-Time Slug Update | 완료 |
 | Sprint 20 M4 | Slug History Redirects | 완료 |
 | Sprint 21 M1 | SEO Meta Foundation (apps/web / instructors slug meta) | 완료 |
+| Sprint 23 | Public Instructor List API (apps/server, cursor pagination) | 완료 |
 
 ---
 
@@ -662,6 +663,39 @@ Backend/DB/예약 시스템은 변경하지 않으며, 기존 redirect 및 APPRO
 - `next build`: PASS (Dynamic route 정상 컴파일)
 - Backend/DB/예약 모듈: **무변경**
 - APPROVED 로직: **변경 없음**
+
+---
+
+## Sprint 23 — Public Instructor List API (완료)
+
+### 개요
+apps/web 사이트맵 어댑터 연결(Sprint 24)을 위한 공개 강사 열거 엔드포인트. apps/server only.
+
+### 주요 변경
+
+| 항목 | 내용 |
+|------|------|
+| `GET /public/instructors` | 커서 기반 페이지네이션 (updatedAt DESC, id DESC) |
+| 필터링 | `instructorStatus: 'APPROVED'` + `slug: { not: null }` (hardcoded) |
+| 응답 형태 | `{ success, data: { items: [{slug, updatedAt}], nextCursor, hasMore } }` |
+| 커서 인코딩 | `base64url(updatedAt\|id)` — 무효 커서 시 첫 페이지 반환 (dev-only 경고) |
+| 기존 엔드포인트 | `GET /public/instructors/:slug` **무변경** (308 redirect + 404 보존) |
+
+### 변경 파일 (apps/server only, 4개)
+
+**신규 (2개):**
+- `apps/server/src/public/dto/query-public-instructors.dto.ts`
+- `apps/server/test/public-instructor-list.spec.ts` — 10개 테스트
+
+**수정 (2개):**
+- `apps/server/src/public/public.controller.ts` — `@Get('instructors')` 추가 (`:slug` 앞 선언)
+- `apps/server/src/public/public.service.ts` — `listApprovedInstructors()` + 커서 encode/decode
+
+### 검증 결과
+- `tsc --noEmit`: PASS
+- `jest`: 23 suites, 199 tests — ALL PASS
+- 기존 `GET /public/instructors/:slug` 테스트: **무변경, 통과**
+- apps/web: **무변경**
 # #   R e p o   G u a r d r a i l s   ( v e r i f i e d   2 0 2 6 - 0 2 - 1 6 ) 
  -   B r a n c h   p r o t e c t i o n :   m a i n 
  -   R e q u i r e   s t a t u s   c h e c k s :   W e b   E 2 E   T e s t s   ( . g i t h u b / w o r k f l o w s / w e b - e 2 e . y m l ) 

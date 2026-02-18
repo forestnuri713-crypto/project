@@ -40,6 +40,24 @@ export interface InstructorProfileResult {
   };
 }
 
+function encodeCursor(updatedAt: Date, id: string): string {
+  return Buffer.from(`${updatedAt.toISOString()}|${id}`).toString('base64url');
+}
+
+function decodeCursor(cursor: string): { updatedAt: Date; id: string } | null {
+  try {
+    const raw = Buffer.from(cursor, 'base64url').toString();
+    const sep = raw.indexOf('|');
+    if (sep === -1) return null;
+    const updatedAt = new Date(raw.slice(0, sep));
+    const id = raw.slice(sep + 1);
+    if (isNaN(updatedAt.getTime()) || !id) return null;
+    return { updatedAt, id };
+  } catch {
+    return null;
+  }
+}
+
 @Injectable()
 export class PublicService {
   constructor(private readonly prisma: PrismaService) {}
@@ -104,6 +122,46 @@ export class PublicService {
             : null,
         },
       },
+    };
+  }
+
+  async listApprovedInstructors(cursor?: string, limit = 20) {
+    const baseWhere: Record<string, unknown> = {
+      instructorStatus: 'APPROVED' as const,
+      slug: { not: null },
+    };
+
+    if (cursor) {
+      const decoded = decodeCursor(cursor);
+      if (decoded) {
+        baseWhere.OR = [
+          { updatedAt: { lt: decoded.updatedAt } },
+          { updatedAt: { equals: decoded.updatedAt }, id: { lt: decoded.id } },
+        ];
+      } else if (process.env.NODE_ENV !== 'production') {
+        console.warn('[public] invalid cursor ignored:', cursor);
+      }
+    }
+
+    const rows = await this.prisma.user.findMany({
+      where: baseWhere,
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      select: { id: true, slug: true, updatedAt: true },
+    });
+
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+    const lastItem = items[items.length - 1];
+    const nextCursor =
+      hasMore && lastItem
+        ? encodeCursor(lastItem.updatedAt, lastItem.id)
+        : null;
+
+    return {
+      items: items.map((r) => ({ slug: r.slug!, updatedAt: r.updatedAt })),
+      nextCursor,
+      hasMore,
     };
   }
 }
