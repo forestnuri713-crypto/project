@@ -1,7 +1,13 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('/instructors/[slug] SSR meta tags', () => {
+
+  test('FORCE FAIL - guardrail validation', async () => {
+    expect(1).toBe(2);
+  });
+
   test('Case 1: APPROVED instructor has correct SEO meta', async ({ request }) => {
+
     const res = await request.get('/instructors/kim-forest-e2e');
     expect(res.status()).toBe(200);
 
