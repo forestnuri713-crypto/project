@@ -1,8 +1,8 @@
 # 숲똑 (SoopTalk) — 프로젝트 현황
 
-> 최종 업데이트: 2026-02-18
-> 빌드 상태: `tsc --noEmit` PASS (server + admin)
-> 커밋: `5a2629c` (main)
+> 최종 업데이트: 2026-02-22
+> 빌드 상태: `tsc --noEmit` PASS (server + admin) | `next build` PASS (web)
+> 커밋: `921414a` (sprint-24/sitemap-instructor-adapter)
 
 ---
 
@@ -42,7 +42,9 @@
 | Sprint 20 M3 | One-Time Slug Update | 완료 |
 | Sprint 20 M4 | Slug History Redirects | 완료 |
 | Sprint 21 M1 | SEO Meta Foundation (apps/web / instructors slug meta) | 완료 |
+| Sprint 22 | Sitemap foundation (static-only) | 완료 |
 | Sprint 23 | Public Instructor List API (apps/server, cursor pagination) | 완료 |
+| Sprint 24 | Wire sitemap adapter to real instructor list endpoint | 완료 |
 
 ---
 
