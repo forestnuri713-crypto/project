@@ -2,7 +2,7 @@
 
 > 최종 업데이트: 2026-02-22
 > 빌드 상태: `tsc --noEmit` PASS (server + admin) | `next build` PASS (web)
-> 커밋: `921414a` (sprint-24/sitemap-instructor-adapter)
+> 커밋: `f3d6ede` (sprint-24/sitemap-instructor-adapter)
 
 ---
 
@@ -45,6 +45,7 @@
 | Sprint 22 | Sitemap foundation (static-only) | 완료 |
 | Sprint 23 | Public Instructor List API (apps/server, cursor pagination) | 완료 |
 | Sprint 24 | Wire sitemap adapter to real instructor list endpoint | 완료 |
+| Infra | Render 배포 준비 (start:prod migrate deploy + 설정 문서화) | 완료 |
 
 ---
 
@@ -698,6 +699,61 @@ apps/web 사이트맵 어댑터 연결(Sprint 24)을 위한 공개 강사 열거
 - `jest`: 23 suites, 199 tests — ALL PASS
 - 기존 `GET /public/instructors/:slug` 테스트: **무변경, 통과**
 - apps/web: **무변경**
+
+---
+
+## Sprint 24 — Sitemap Instructor Adapter (완료)
+
+### 개요
+apps/web 사이트맵을 실제 `GET /public/instructors` 엔드포인트에 연결. apps/web only.
+
+### 주요 변경
+
+| 항목 | 내용 |
+|------|------|
+| `instructors.adapter.ts` | 커서 페이지네이션 전체 소진 (최대 1000페이지, limit 100), 슬러그 deduplicate, 에러 시 빈 목록 fallback |
+| `sitemap.ts` | Next.js Metadata Route — 정적 URL(/) + 강사 프로필 URL (`/instructors/{slug}`), 24h ISR revalidation |
+| Fallback | `NEXT_PUBLIC_API_URL` 미설정 또는 fetch 실패 시 정적 URL만 렌더링, 빌드 미중단 |
+
+### 변경 파일 (apps/web only, 2개 신규)
+
+- `apps/web/src/lib/instructors.adapter.ts` — 신규
+- `apps/web/src/app/sitemap.ts` — 신규
+
+### 검증 결과
+- `cd apps/web && pnpm build`: PASS (`○ /sitemap.xml` 정적 프리렌더링 확인)
+- `tsc --noEmit`: PASS
+- Backend/DB: **무변경**
+
+---
+
+## Infra — Render 배포 준비 (완료)
+
+### 개요
+apps/server를 Render Web Service로 배포하기 위한 최소 설정. 코드 변경 1줄 + 배포 설정 문서화.
+
+### 주요 변경
+
+| 항목 | 내용 |
+|------|------|
+| `start:prod` 수정 | `prisma migrate deploy … && node dist/main` — 배포 시 마이그레이션 자동 적용 |
+| PORT 바인딩 | `main.ts`가 이미 `process.env.PORT \|\| 3000` 사용 — 추가 변경 불필요 |
+
+### Render 설정 (확정)
+
+| 항목 | 값 |
+|------|----|
+| Root Directory | *(repo root)* |
+| Build Command | `pnpm install --frozen-lockfile && pnpm -C apps/server run prisma:generate && pnpm -C apps/server run build` |
+| Start Command | `pnpm -C apps/server run start:prod` |
+
+### 필수 환경변수 (Render Environment 탭)
+
+`DATABASE_URL`, `NODE_ENV=production`, `JWT_SECRET`, `KAKAO_REST_API_KEY`, `REDIS_URL`, `PORTONE_API_SECRET`, `PORTONE_STORE_ID`, `PORTONE_CHANNEL_KEY`, `PORTONE_WEBHOOK_SECRET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_REGION`, `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`
+
+### 변경 파일 (1개)
+
+- `apps/server/package.json` — `start:prod` 스크립트 수정 (`f3d6ede`)
 # #   R e p o   G u a r d r a i l s   ( v e r i f i e d   2 0 2 6 - 0 2 - 1 6 ) 
  -   B r a n c h   p r o t e c t i o n :   m a i n 
  -   R e q u i r e   s t a t u s   c h e c k s :   W e b   E 2 E   T e s t s   ( . g i t h u b / w o r k f l o w s / w e b - e 2 e . y m l ) 
