@@ -4,10 +4,32 @@ CREATE TYPE "ApprovalStatus" AS ENUM ('PENDING_REVIEW', 'APPROVED', 'REJECTED');
 -- CreateEnum
 CREATE TYPE "SettlementStatus" AS ENUM ('PENDING', 'CONFIRMED', 'PAID');
 
--- AlterEnum
-ALTER TYPE "NotificationType" ADD VALUE 'PROGRAM_APPROVED';
-ALTER TYPE "NotificationType" ADD VALUE 'PROGRAM_REJECTED';
-ALTER TYPE "NotificationType" ADD VALUE 'SETTLEMENT_CREATED';
+-- AlterEnum (safe for fresh DB)
+DO $$ BEGIN
+  -- 1) Create enum type if missing (seed with one value; enum can't be empty)
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'NotificationType') THEN
+    EXECUTE 'CREATE TYPE "NotificationType" AS ENUM (''PROGRAM_APPROVED'')';
+  END IF;
+
+  -- 2) Add values only if missing
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN pg_enum e ON t.oid = e.enumtypid
+    WHERE t.typname = 'NotificationType' AND e.enumlabel = 'PROGRAM_REJECTED'
+  ) THEN
+    EXECUTE 'ALTER TYPE "NotificationType" ADD VALUE ''PROGRAM_REJECTED''';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN pg_enum e ON t.oid = e.enumtypid
+    WHERE t.typname = 'NotificationType' AND e.enumlabel = 'SETTLEMENT_CREATED'
+  ) THEN
+    EXECUTE 'ALTER TYPE "NotificationType" ADD VALUE ''SETTLEMENT_CREATED''';
+  END IF;
+END $$;
 
 -- AlterTable: Add approval and B2B fields to programs
 ALTER TABLE "programs" ADD COLUMN "approval_status" "ApprovalStatus" NOT NULL DEFAULT 'PENDING_REVIEW';
