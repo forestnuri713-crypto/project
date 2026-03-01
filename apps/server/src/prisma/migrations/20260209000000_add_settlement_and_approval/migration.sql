@@ -32,9 +32,9 @@ DO $$ BEGIN
 END $$;
 
 -- AlterTable: Add approval and B2B fields to programs
-ALTER TABLE "programs" ADD COLUMN "approval_status" "ApprovalStatus" NOT NULL DEFAULT 'PENDING_REVIEW';
-ALTER TABLE "programs" ADD COLUMN "rejection_reason" TEXT;
-ALTER TABLE "programs" ADD COLUMN "is_b2b" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Program" ADD COLUMN "approval_status" "ApprovalStatus" NOT NULL DEFAULT 'PENDING_REVIEW';
+ALTER TABLE "Program" ADD COLUMN "rejection_reason" TEXT;
+ALTER TABLE "Program" ADD COLUMN "is_b2b" BOOLEAN NOT NULL DEFAULT false;
 
 -- CreateTable: settlements
 CREATE TABLE "settlements" (
@@ -58,7 +58,7 @@ CREATE TABLE "settlements" (
 );
 
 -- CreateIndex
-CREATE INDEX "programs_approval_status_idx" ON "programs"("approval_status");
+CREATE INDEX "Program_approval_status_idx" ON "Program"("approval_status");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "settlements_instructor_id_period_start_period_end_key" ON "settlements"("instructor_id", "period_start", "period_end");
@@ -67,4 +67,4 @@ CREATE UNIQUE INDEX "settlements_instructor_id_period_start_period_end_key" ON "
 ALTER TABLE "settlements" ADD CONSTRAINT "settlements_instructor_id_fkey" FOREIGN KEY ("instructor_id") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- Migrate existing programs to APPROVED status
-UPDATE "programs" SET "approval_status" = 'APPROVED' WHERE "approval_status" = 'PENDING_REVIEW';
+UPDATE "Program" SET "approval_status" = 'APPROVED' WHERE "approval_status" = 'PENDING_REVIEW';
