@@ -75,7 +75,7 @@ export class AdminBulkCancelService {
 
   constructor(
     private prisma: PrismaService,
-    private paymentsService: PaymentsService | null,
+    private paymentsService: PaymentsService,
     private notificationsService: NotificationsService,
   ) {}
 
