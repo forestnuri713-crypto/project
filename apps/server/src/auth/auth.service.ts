@@ -6,7 +6,9 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmailLoginDto } from './dto/email-login.dto';
 import { KakaoLoginDto } from './dto/kakao-login.dto';
 import { generateUniqueSlug } from '../public/slug.utils';
 
@@ -95,6 +97,24 @@ export class AuthService {
       accessToken: token,
       user,
     };
+  }
+
+  async emailLogin(dto: EmailLoginDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (!user || !user.password) {
+      throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다');
+    }
+
+    const isMatch = await bcrypt.compare(dto.password, user.password);
+    if (!isMatch) {
+      throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다');
+    }
+
+    const token = this.generateToken(user);
+    return { accessToken: token, user };
   }
 
   async applyAsInstructor(userId: string) {
