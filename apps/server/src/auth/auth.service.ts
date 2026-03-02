@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { KakaoLoginDto } from './dto/kakao-login.dto';
@@ -20,10 +21,21 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private configService: ConfigService,
   ) {}
 
   async kakaoLogin(dto: KakaoLoginDto) {
-    const kakaoUser = await this.getKakaoUserInfo(dto.accessToken);
+    let kakaoAccessToken: string;
+
+    if (dto.code) {
+      kakaoAccessToken = await this.exchangeKakaoCode(dto.code, dto.redirectUri!);
+    } else if (dto.accessToken) {
+      kakaoAccessToken = dto.accessToken;
+    } else {
+      throw new BadRequestException('accessToken 또는 code가 필요합니다');
+    }
+
+    const kakaoUser = await this.getKakaoUserInfo(kakaoAccessToken);
     const kakaoId = String(kakaoUser.id);
     const email = kakaoUser.kakao_account?.email;
     const nickname = kakaoUser.kakao_account?.profile?.nickname ?? '카카오 사용자';
@@ -116,6 +128,33 @@ export class AuthService {
       email: user.email,
       role: user.role,
     });
+  }
+
+  private async exchangeKakaoCode(code: string, redirectUri: string): Promise<string> {
+    const clientId = this.configService.get<string>('KAKAO_REST_API_KEY');
+    if (!clientId) {
+      throw new UnauthorizedException('KAKAO_REST_API_KEY가 설정되지 않았습니다');
+    }
+
+    const params = new URLSearchParams({
+      grant_type: 'authorization_code',
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      code,
+    });
+
+    const response = await fetch('https://kauth.kakao.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' },
+      body: params.toString(),
+    });
+
+    if (!response.ok) {
+      throw new UnauthorizedException('카카오 인가 코드 교환에 실패했습니다');
+    }
+
+    const data = await response.json();
+    return data.access_token;
   }
 
   private async getKakaoUserInfo(accessToken: string): Promise<KakaoUserInfo> {
