@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { api, ApiError } from '@/services/api';
@@ -8,6 +8,22 @@ import { api, ApiError } from '@/services/api';
 const KAKAO_REDIRECT_URI = process.env.NEXT_PUBLIC_KAKAO_REDIRECT_URI || '';
 
 export default function KakaoCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-screen bg-gray-100">
+          <div className="w-full max-w-sm bg-white rounded-lg shadow-md p-8 text-center">
+            <p className="text-gray-500">로그인 처리 중...</p>
+          </div>
+        </div>
+      }
+    >
+      <KakaoCallbackContent />
+    </Suspense>
+  );
+}
+
+function KakaoCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login } = useAuth();
