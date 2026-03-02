@@ -23,6 +23,7 @@ export interface User {
   name: string;
   role: UserRole;
   kakaoId?: string;
+  googleId?: string;
   profileImageUrl?: string;
   phoneNumber: string;
   fcmToken?: string;
