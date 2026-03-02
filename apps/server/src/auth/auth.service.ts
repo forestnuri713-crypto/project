@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,6 +23,8 @@ interface KakaoUserInfo {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
@@ -149,11 +156,17 @@ export class AuthService {
       body: params.toString(),
     });
 
+    const data = await response.json();
+
     if (!response.ok) {
-      throw new UnauthorizedException('카카오 인가 코드 교환에 실패했습니다');
+      this.logger.error(
+        `카카오 토큰 교환 실패: ${response.status} ${JSON.stringify(data)} (redirect_uri: ${redirectUri})`,
+      );
+      throw new UnauthorizedException(
+        `카카오 인가 코드 교환에 실패했습니다: ${data.error_description || data.error || response.status}`,
+      );
     }
 
-    const data = await response.json();
     return data.access_token;
   }
 
