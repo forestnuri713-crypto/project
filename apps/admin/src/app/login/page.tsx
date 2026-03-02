@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 
 const KAKAO_JS_KEY = process.env.NEXT_PUBLIC_KAKAO_JS_KEY || '';
+const KAKAO_REDIRECT_URI = process.env.NEXT_PUBLIC_KAKAO_REDIRECT_URI || '';
 
 declare global {
   interface Window {
@@ -37,7 +38,7 @@ export default function LoginPage() {
   const handleKakaoLogin = () => {
     if (!window.Kakao) return;
 
-    const redirectUri = `${window.location.origin}/login/callback`;
+    const redirectUri = KAKAO_REDIRECT_URI || `${window.location.origin}/login/callback`;
     window.Kakao.Auth.authorize({ redirectUri });
   };
 

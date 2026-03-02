@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { api, ApiError } from '@/services/api';
 
+const KAKAO_REDIRECT_URI = process.env.NEXT_PUBLIC_KAKAO_REDIRECT_URI || '';
+
 export default function KakaoCallbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -25,7 +27,7 @@ export default function KakaoCallbackPage() {
       return;
     }
 
-    const redirectUri = `${window.location.origin}/login/callback`;
+    const redirectUri = KAKAO_REDIRECT_URI || `${window.location.origin}/login/callback`;
 
     (async () => {
       try {
