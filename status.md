@@ -525,7 +525,7 @@ Human-readable slug 도입. UUID 기반 기존 링크와 backward compatibility 
 - `apps/server/test/slug-utils.spec.ts` — slug 유틸 테스트 (13개)
 - `apps/server/test/public-instructor-profile.spec.ts` — 프로필 엔드포인트 테스트 (9개)
 
-**수정 (3개):**
+**수정 (4개):**
 - `apps/server/src/prisma/schema.prisma` — User 모델에 `slug String? @unique` 추가
 - `apps/server/src/public/public.service.ts` — dual-read + 308 redirect 시그널
 - `apps/server/src/public/public.controller.ts` — 308 redirect 처리
