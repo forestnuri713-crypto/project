@@ -51,9 +51,10 @@
 
 ## Phase 4 이후 적용된 변경 사항
 
-### 1. 인증 100% 카카오 로그인
+### 1. 인증 (카카오 + 구글 로그인)
 - 로컬 회원가입/로그인 제거, `POST /auth/kakao` 단일 인증
 - 첫 가입 시 `role` 선택 가능
+- **[예정]** `POST /auth/google` 구글 소셜 로그인 추가 계획
 
 ### 2. 위치+시간 자동 출석 체크
 - `POST /attendance/auto-checkin` — Haversine 거리(≤100m) + 시간 범위(±30분) 검증
@@ -700,6 +701,7 @@ Human-readable slug 도입. UUID 기반 기존 링크와 backward compatibility 
 
 ## 다음 단계
 
+- **구글 소셜 로그인** — `POST /auth/google` 엔드포인트 추가 (카카오와 동일한 흐름: OAuth 토큰 검증 → 유저 upsert → JWT 발급)
 - Redis 분산 락 제거 검토 (remaining_capacity로 대체 가능)
 - DB 마이그레이션 적용: `npx prisma migrate deploy` 필요
 
