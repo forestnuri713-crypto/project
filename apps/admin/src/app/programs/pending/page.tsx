@@ -1,60 +1,43 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useMemo } from 'react';
 import AdminLayout from '@/components/AdminLayout';
 import Pagination from '@/components/Pagination';
+import ErrorPanel from '@/components/ErrorPanel';
 import { api } from '@/services/api';
-
-interface Program {
-  id: string;
-  title: string;
-  approvalStatus: string;
-  createdAt: string;
-  instructor: { id: string; name: string; email: string };
-}
-
-interface ProgramsResponse {
-  items: Program[];
-  total: number;
-  page: number;
-  limit: number;
-}
+import { useListData } from '@/hooks';
+import type { AdminProgram } from '@/types';
 
 export default function ProgramsPendingPage() {
-  const [data, setData] = useState<ProgramsResponse | null>(null);
-  const [page, setPage] = useState(1);
+  const filters = useMemo(() => ({ approvalStatus: 'PENDING_REVIEW' }), []);
 
-  const load = useCallback(() => {
-    api
-      .get<ProgramsResponse>(
-        `/admin/programs?approvalStatus=PENDING_REVIEW&page=${page}&limit=20`,
-      )
-      .then(setData);
-  }, [page]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { data, loading, error, page, setPage, reload } = useListData<AdminProgram>({
+    endpoint: '/admin/programs',
+    filters,
+  });
 
   const handleApprove = async (id: string) => {
     if (!confirm('승인하시겠습니까?')) return;
     await api.patch(`/admin/programs/${id}/approve`);
-    load();
+    reload();
   };
 
   const handleReject = async (id: string) => {
     const reason = prompt('거절 사유를 입력하세요');
     if (!reason) return;
     await api.patch(`/admin/programs/${id}/reject`, { rejectionReason: reason });
-    load();
+    reload();
   };
 
   return (
     <AdminLayout>
       <h2 className="text-xl font-bold mb-6">승인 대기 프로그램</h2>
-      {!data ? (
+
+      {error && <ErrorPanel error={error} onRetry={reload} />}
+
+      {loading ? (
         <p className="text-gray-500">로딩 중...</p>
-      ) : data.items.length === 0 ? (
+      ) : !data || data.items.length === 0 ? (
         <p className="text-gray-500">대기 중인 프로그램이 없습니다</p>
       ) : (
         <>
@@ -72,7 +55,7 @@ export default function ProgramsPendingPage() {
                 {data.items.map((p) => (
                   <tr key={p.id}>
                     <td className="px-4 py-3">{p.title}</td>
-                    <td className="px-4 py-3">{p.instructor.name}</td>
+                    <td className="px-4 py-3">{p.instructor?.name}</td>
                     <td className="px-4 py-3">
                       {new Date(p.createdAt).toLocaleDateString('ko-KR')}
                     </td>
@@ -96,9 +79,9 @@ export default function ProgramsPendingPage() {
             </table>
           </div>
           <Pagination
-            page={data.page}
+            page={page}
             total={data.total}
-            pageSize={data.limit}
+            pageSize={data.limit ?? 20}
             onChange={setPage}
           />
         </>

@@ -1,27 +1,13 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import AdminLayout from '@/components/AdminLayout';
 import Pagination from '@/components/Pagination';
+import ErrorPanel from '@/components/ErrorPanel';
+import StatusBadge from '@/components/StatusBadge';
 import { api } from '@/services/api';
-
-interface Settlement {
-  id: string;
-  providerId: string;
-  instructorId: string;
-  totalAmount: number;
-  status: string;
-  periodStart: string;
-  periodEnd: string;
-  createdAt: string;
-}
-
-interface SettlementsResponse {
-  items: Settlement[];
-  total: number;
-  page: number;
-  limit: number;
-}
+import { useListData } from '@/hooks';
+import type { AdminSettlement } from '@/types';
 
 const STATUS_OPTIONS = ['', 'PENDING', 'CONFIRMED', 'PAID'];
 const STATUS_LABELS: Record<string, string> = {
@@ -32,24 +18,19 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function SettlementsPage() {
-  const [data, setData] = useState<SettlementsResponse | null>(null);
-  const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
 
-  const load = useCallback(() => {
-    const params = new URLSearchParams({ page: String(page), limit: '20' });
-    if (status) params.set('status', status);
-    api.get<SettlementsResponse>(`/admin/settlements?${params}`).then(setData);
-  }, [page, status]);
+  const filters = useMemo(() => ({ status }), [status]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { data, loading, error, page, setPage, reload } = useListData<AdminSettlement>({
+    endpoint: '/admin/settlements',
+    filters,
+  });
 
   const handlePay = async (id: string) => {
     if (!confirm('지급 처리하시겠습니까?')) return;
     await api.patch(`/admin/settlements/${id}/pay`);
-    load();
+    reload();
   };
 
   return (
@@ -59,10 +40,7 @@ export default function SettlementsPage() {
         {STATUS_OPTIONS.map((s) => (
           <button
             key={s}
-            onClick={() => {
-              setStatus(s);
-              setPage(1);
-            }}
+            onClick={() => setStatus(s)}
             className={`px-3 py-1.5 text-sm rounded border ${
               status === s ? 'bg-gray-900 text-white' : 'hover:bg-gray-100'
             }`}
@@ -71,9 +49,12 @@ export default function SettlementsPage() {
           </button>
         ))}
       </div>
-      {!data ? (
+
+      {error && <ErrorPanel error={error} onRetry={reload} />}
+
+      {loading ? (
         <p className="text-gray-500">로딩 중...</p>
-      ) : data.items.length === 0 ? (
+      ) : !data || data.items.length === 0 ? (
         <p className="text-gray-500">정산 내역이 없습니다</p>
       ) : (
         <>
@@ -96,17 +77,7 @@ export default function SettlementsPage() {
                     </td>
                     <td className="px-4 py-3">{s.totalAmount.toLocaleString()}원</td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          s.status === 'PAID'
-                            ? 'bg-green-100 text-green-800'
-                            : s.status === 'CONFIRMED'
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-yellow-100 text-yellow-800'
-                        }`}
-                      >
-                        {STATUS_LABELS[s.status] || s.status}
-                      </span>
+                      <StatusBadge status={s.status} variant="settlement" />
                     </td>
                     <td className="px-4 py-3">
                       {s.status !== 'PAID' && (
@@ -124,9 +95,9 @@ export default function SettlementsPage() {
             </table>
           </div>
           <Pagination
-            page={data.page}
+            page={page}
             total={data.total}
-            pageSize={data.limit}
+            pageSize={data.limit ?? 20}
             onChange={setPage}
           />
         </>

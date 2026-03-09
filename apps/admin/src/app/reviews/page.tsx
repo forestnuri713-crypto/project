@@ -1,53 +1,35 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import AdminLayout from '@/components/AdminLayout';
 import Pagination from '@/components/Pagination';
+import ErrorPanel from '@/components/ErrorPanel';
+import StatusBadge from '@/components/StatusBadge';
 import { api } from '@/services/api';
-
-interface ReviewItem {
-  id: string;
-  rating: number;
-  comment: string;
-  status: 'VISIBLE' | 'HIDDEN';
-  editedAt: string | null;
-  createdAt: string;
-  program: { id: string; title: string };
-  parentUser: { id: string; name: string; email: string };
-}
-
-interface ReviewsResponse {
-  items: ReviewItem[];
-  total: number;
-  page: number;
-  limit: number;
-}
+import { useListData } from '@/hooks';
+import type { AdminReview } from '@/types';
 
 export default function ReviewsPage() {
-  const [data, setData] = useState<ReviewsResponse | null>(null);
-  const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
   const [ratingFilter, setRatingFilter] = useState('');
 
-  const load = useCallback(() => {
-    const params = new URLSearchParams({ page: String(page), limit: '20' });
-    if (statusFilter) params.set('status', statusFilter);
-    if (ratingFilter) params.set('rating', ratingFilter);
-    api.get<ReviewsResponse>(`/admin/reviews?${params}`).then(setData);
-  }, [page, statusFilter, ratingFilter]);
+  const filters = useMemo(
+    () => ({ status: statusFilter, rating: ratingFilter }),
+    [statusFilter, ratingFilter],
+  );
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { data, loading, error, page, setPage, reload } = useListData<AdminReview>({
+    endpoint: '/admin/reviews',
+    filters,
+  });
 
   const handleSetStatus = async (id: string, newStatus: 'VISIBLE' | 'HIDDEN') => {
     await api.patch(`/admin/reviews/${id}/status`, { status: newStatus });
-    load();
+    reload();
   };
 
-  const renderStars = (rating: number) => {
-    return '★'.repeat(rating) + '☆'.repeat(5 - rating);
-  };
+  const renderStars = (rating: number) =>
+    '★'.repeat(rating) + '☆'.repeat(5 - rating);
 
   return (
     <AdminLayout>
@@ -56,10 +38,7 @@ export default function ReviewsPage() {
       <div className="flex gap-3 mb-4">
         <select
           value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value);
-            setPage(1);
-          }}
+          onChange={(e) => setStatusFilter(e.target.value)}
           className="border rounded px-3 py-1.5 text-sm"
         >
           <option value="">전체 상태</option>
@@ -68,10 +47,7 @@ export default function ReviewsPage() {
         </select>
         <select
           value={ratingFilter}
-          onChange={(e) => {
-            setRatingFilter(e.target.value);
-            setPage(1);
-          }}
+          onChange={(e) => setRatingFilter(e.target.value)}
           className="border rounded px-3 py-1.5 text-sm"
         >
           <option value="">전체 별점</option>
@@ -83,9 +59,11 @@ export default function ReviewsPage() {
         </select>
       </div>
 
-      {!data ? (
+      {error && <ErrorPanel error={error} onRetry={reload} />}
+
+      {loading ? (
         <p className="text-gray-500">로딩 중...</p>
-      ) : data.items.length === 0 ? (
+      ) : !data || data.items.length === 0 ? (
         <p className="text-gray-500">리뷰가 없습니다</p>
       ) : (
         <>
@@ -105,27 +83,21 @@ export default function ReviewsPage() {
               <tbody className="divide-y">
                 {data.items.map((r) => (
                   <tr key={r.id}>
-                    <td className="px-4 py-3">{r.program.title}</td>
-                    <td className="px-4 py-3">{r.parentUser.name}</td>
+                    <td className="px-4 py-3">{r.program?.title}</td>
+                    <td className="px-4 py-3">{r.parentUser?.name}</td>
                     <td className="px-4 py-3 text-yellow-500">{renderStars(r.rating)}</td>
                     <td className="px-4 py-3 max-w-xs truncate">{r.comment}</td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          r.status === 'VISIBLE'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}
-                      >
-                        {r.status === 'VISIBLE' ? '공개' : '숨김'}
-                      </span>
+                      <StatusBadge status={r.status} variant="review" />
                     </td>
                     <td className="px-4 py-3">
                       {new Date(r.createdAt).toLocaleDateString('ko-KR')}
                     </td>
                     <td className="px-4 py-3">
                       <button
-                        onClick={() => handleSetStatus(r.id, r.status === 'VISIBLE' ? 'HIDDEN' : 'VISIBLE')}
+                        onClick={() =>
+                          handleSetStatus(r.id, r.status === 'VISIBLE' ? 'HIDDEN' : 'VISIBLE')
+                        }
                         className={`px-3 py-1 rounded text-xs ${
                           r.status === 'VISIBLE'
                             ? 'bg-red-600 text-white hover:bg-red-700'
@@ -141,9 +113,9 @@ export default function ReviewsPage() {
             </table>
           </div>
           <Pagination
-            page={data.page}
+            page={page}
             total={data.total}
-            pageSize={data.limit}
+            pageSize={data.limit ?? 20}
             onChange={setPage}
           />
         </>

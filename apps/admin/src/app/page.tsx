@@ -3,21 +3,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import AdminLayout from '@/components/AdminLayout';
+import ErrorPanel from '@/components/ErrorPanel';
 import { api, ApiError } from '@/services/api';
-
-interface DashboardStats {
-  totalUsers: number;
-  totalReservations: number;
-  totalRevenue: number;
-  pendingPrograms: number;
-  pendingInstructors: number;
-}
-
-interface ErrorState {
-  message: string;
-  code: string | null;
-  requestId: string | null;
-}
+import type { DashboardStats, ErrorState } from '@/types';
 
 // ─── Drill-down mapping ──────────────────────────────
 // Only cards with existing admin pages get an href.
@@ -116,25 +104,7 @@ export default function DashboardPage() {
     <AdminLayout>
       <h2 className="text-xl font-bold mb-6">대시보드</h2>
 
-      {/* Error Panel */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-800 rounded p-4 text-sm mb-6">
-          <div className="font-medium">오류</div>
-          <div>{error.message}</div>
-          {error.code && (
-            <div className="text-xs mt-1">code: {error.code}</div>
-          )}
-          {error.requestId && (
-            <div className="text-xs mt-1">requestId: {error.requestId}</div>
-          )}
-          <button
-            onClick={fetchStats}
-            className="mt-3 px-3 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
-          >
-            다시 시도
-          </button>
-        </div>
-      )}
+      {error && <ErrorPanel error={error} onRetry={fetchStats} />}
 
       {loading ? (
         <p className="text-sm text-gray-500">로딩 중...</p>

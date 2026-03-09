@@ -1,29 +1,25 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import AdminLayout from '@/components/AdminLayout';
+import ErrorPanel from '@/components/ErrorPanel';
+import StatusBadge from '@/components/StatusBadge';
+import Modal from '@/components/Modal';
 import { api, ApiError } from '@/services/api';
-
-type InstructorStatus = 'APPLIED' | 'APPROVED' | 'REJECTED';
-
-type Certification = {
-  type: string;
-  label: string;
-  iconType?: string;
-};
+import type { Certification, ErrorState } from '@/types';
 
 type Instructor = {
   id: string;
   email: string;
   name: string;
-  role: 'INSTRUCTOR' | string;
+  role: string;
   phoneNumber: string | null;
   profileImageUrl: string | null;
-  instructorStatus: InstructorStatus;
+  instructorStatus: string;
   instructorStatusReason: string | null;
-  certifications: unknown; // backend is JsonValue; normalize client-side
+  certifications: unknown;
   createdAt: string;
 };
 
@@ -46,7 +42,7 @@ export default function InstructorDetailPage() {
 
   const [data, setData] = useState<Instructor | null>(null);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<{ message: string; requestId: string | null } | null>(null);
+  const [err, setErr] = useState<ErrorState | null>(null);
 
   const [saving, setSaving] = useState(false);
 
@@ -69,9 +65,9 @@ export default function InstructorDetailPage() {
       setCerts(toCertArray(res.certifications));
     } catch (e) {
       if (e instanceof ApiError) {
-        setErr({ message: e.message, requestId: e.requestId ?? null });
+        setErr({ message: e.message, code: e.code, requestId: e.requestId ?? null });
       } else {
-        setErr({ message: 'Unknown error', requestId: null });
+        setErr({ message: '알 수 없는 오류가 발생했습니다.', code: null, requestId: null });
       }
     } finally {
       setLoading(false);
@@ -95,9 +91,9 @@ export default function InstructorDetailPage() {
       router.refresh();
     } catch (e) {
       if (e instanceof ApiError) {
-        setErr({ message: e.message, requestId: e.requestId ?? null });
+        setErr({ message: e.message, code: e.code, requestId: e.requestId ?? null });
       } else {
-        setErr({ message: 'Unknown error', requestId: null });
+        setErr({ message: '알 수 없는 오류가 발생했습니다.', code: null, requestId: null });
       }
     } finally {
       setSaving(false);
@@ -123,9 +119,9 @@ export default function InstructorDetailPage() {
       router.refresh();
     } catch (e) {
       if (e instanceof ApiError) {
-        setErr({ message: e.message, requestId: e.requestId ?? null });
+        setErr({ message: e.message, code: e.code, requestId: e.requestId ?? null });
       } else {
-        setErr({ message: 'Unknown error', requestId: null });
+        setErr({ message: '알 수 없는 오류가 발생했습니다.', code: null, requestId: null });
       }
     } finally {
       setSaving(false);
@@ -160,30 +156,14 @@ export default function InstructorDetailPage() {
       await fetchOne();
     } catch (e) {
       if (e instanceof ApiError) {
-        setErr({ message: e.message, requestId: e.requestId ?? null });
+        setErr({ message: e.message, code: e.code, requestId: e.requestId ?? null });
       } else {
-        setErr({ message: 'Unknown error', requestId: null });
+        setErr({ message: '알 수 없는 오류가 발생했습니다.', code: null, requestId: null });
       }
     } finally {
       setSaving(false);
     }
   }, [id, certs, fetchOne]);
-
-  const statusBadge = useMemo(() => {
-    const s = data?.instructorStatus;
-    if (!s) return null;
-
-    const klass =
-      s === 'APPLIED'
-        ? 'bg-yellow-100 text-yellow-800'
-        : s === 'APPROVED'
-        ? 'bg-green-100 text-green-800'
-        : 'bg-red-100 text-red-800';
-
-    const label = s === 'APPLIED' ? '신청' : s === 'APPROVED' ? '승인' : '거절';
-
-    return <span className={`px-2 py-0.5 rounded text-xs font-medium ${klass}`}>{label}</span>;
-  }, [data?.instructorStatus]);
 
   if (!id) {
     return (
@@ -205,11 +185,7 @@ export default function InstructorDetailPage() {
       {loading ? (
         <div className="text-sm text-gray-600">로딩 중...</div>
       ) : err ? (
-        <div className="bg-red-50 border border-red-200 text-red-800 rounded p-4 text-sm">
-          <div className="font-medium">에러</div>
-          <div className="mt-1">{err.message}</div>
-          {err.requestId ? <div className="mt-1 text-xs">requestId: {err.requestId}</div> : null}
-        </div>
+        <ErrorPanel error={err} onRetry={fetchOne} />
       ) : !data ? (
         <div className="text-sm text-gray-600">데이터가 없습니다.</div>
       ) : (
@@ -220,7 +196,7 @@ export default function InstructorDetailPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <div className="text-lg font-semibold">{data.name}</div>
-                  {statusBadge}
+                  <StatusBadge status={data.instructorStatus} variant="instructor" />
                 </div>
                 <div className="mt-2 text-sm text-gray-700 space-y-1">
                   <div>이메일: {data.email}</div>
@@ -325,39 +301,32 @@ export default function InstructorDetailPage() {
         </div>
       )}
 
-      {/* Reject modal */}
-      {rejectOpen ? (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow w-full max-w-lg p-6">
-            <div className="text-lg font-semibold">거절 사유</div>
-            <div className="mt-3">
-              <textarea
-                className="w-full border rounded p-3 text-sm min-h-[120px]"
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                placeholder="거절 사유를 입력하세요 (필수)"
-              />
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                className="px-3 py-2 rounded border text-sm"
-                onClick={() => {
-                  setRejectOpen(false);
-                  setRejectReason('');
-                }}
-              >
-                취소
-              </button>
-              <button
-                className="px-3 py-2 rounded bg-red-600 text-white text-sm hover:bg-red-700"
-                onClick={onReject}
-              >
-                거절 확정
-              </button>
-            </div>
-          </div>
+      <Modal
+        open={rejectOpen}
+        onClose={() => { setRejectOpen(false); setRejectReason(''); }}
+        title="거절 사유"
+      >
+        <textarea
+          className="w-full border rounded p-3 text-sm min-h-[120px]"
+          value={rejectReason}
+          onChange={(e) => setRejectReason(e.target.value)}
+          placeholder="거절 사유를 입력하세요 (필수)"
+        />
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            className="px-3 py-2 rounded border text-sm"
+            onClick={() => { setRejectOpen(false); setRejectReason(''); }}
+          >
+            취소
+          </button>
+          <button
+            className="px-3 py-2 rounded bg-red-600 text-white text-sm hover:bg-red-700"
+            onClick={onReject}
+          >
+            거절 확정
+          </button>
         </div>
-      ) : null}
+      </Modal>
     </AdminLayout>
   );
 }

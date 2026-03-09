@@ -1,25 +1,13 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import AdminLayout from '@/components/AdminLayout';
 import Pagination from '@/components/Pagination';
+import ErrorPanel from '@/components/ErrorPanel';
+import StatusBadge from '@/components/StatusBadge';
 import { api } from '@/services/api';
-
-interface User {
-  id: string;
-  email: string;
-  name: string;
-  role: string;
-  phoneNumber: string | null;
-  createdAt: string;
-}
-
-interface UsersResponse {
-  items: User[];
-  total: number;
-  page: number;
-  limit: number;
-}
+import { useListData } from '@/hooks';
+import type { AdminUser } from '@/types';
 
 const ROLES = ['', 'PARENT', 'INSTRUCTOR', 'ADMIN'];
 const ROLE_LABELS: Record<string, string> = {
@@ -30,26 +18,20 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 export default function UsersPage() {
-  const [data, setData] = useState<UsersResponse | null>(null);
-  const [page, setPage] = useState(1);
   const [role, setRole] = useState('');
   const [search, setSearch] = useState('');
 
-  const load = useCallback(() => {
-    const params = new URLSearchParams({ page: String(page), limit: '20' });
-    if (role) params.set('role', role);
-    if (search) params.set('search', search);
-    api.get<UsersResponse>(`/admin/users?${params}`).then(setData);
-  }, [page, role, search]);
+  const filters = useMemo(() => ({ role, search }), [role, search]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { data, loading, error, page, setPage, reload } = useListData<AdminUser>({
+    endpoint: '/admin/users',
+    filters,
+  });
 
   const handleRoleChange = async (userId: string, newRole: string) => {
     if (!confirm(`역할을 ${ROLE_LABELS[newRole] || newRole}(으)로 변경하시겠습니까?`)) return;
     await api.patch(`/admin/users/${userId}/role`, { role: newRole });
-    load();
+    reload();
   };
 
   return (
@@ -60,10 +42,7 @@ export default function UsersPage() {
           {ROLES.map((r) => (
             <button
               key={r}
-              onClick={() => {
-                setRole(r);
-                setPage(1);
-              }}
+              onClick={() => setRole(r)}
               className={`px-3 py-1.5 text-sm rounded border ${
                 role === r ? 'bg-gray-900 text-white' : 'hover:bg-gray-100'
               }`}
@@ -77,13 +56,15 @@ export default function UsersPage() {
           placeholder="이름 또는 이메일 검색"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && (setPage(1), load())}
           className="border rounded px-3 py-1.5 text-sm w-60"
         />
       </div>
-      {!data ? (
+
+      {error && <ErrorPanel error={error} onRetry={reload} />}
+
+      {loading ? (
         <p className="text-gray-500">로딩 중...</p>
-      ) : (
+      ) : data && (
         <>
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <table className="w-full text-sm">
@@ -102,9 +83,7 @@ export default function UsersPage() {
                     <td className="px-4 py-3">{u.name}</td>
                     <td className="px-4 py-3">{u.email}</td>
                     <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 bg-gray-100 rounded text-xs font-medium">
-                        {ROLE_LABELS[u.role] || u.role}
-                      </span>
+                      <StatusBadge status={u.role} variant="role" />
                     </td>
                     <td className="px-4 py-3">
                       {new Date(u.createdAt).toLocaleDateString('ko-KR')}
@@ -128,9 +107,9 @@ export default function UsersPage() {
             </table>
           </div>
           <Pagination
-            page={data.page}
+            page={page}
             total={data.total}
-            pageSize={data.limit}
+            pageSize={data.limit ?? 20}
             onChange={setPage}
           />
         </>

@@ -4,27 +4,15 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import AdminLayout from '@/components/AdminLayout';
 import Pagination from '@/components/Pagination';
-import { api } from '@/services/api';
-
-interface Provider {
-  id: string;
-  name: string;
-  regionTags: string[] | null;
-  createdAt: string;
-  profile: { isPublished: boolean } | null;
-}
-
-interface ProvidersResponse {
-  items: Provider[];
-  total: number;
-  page: number;
-  pageSize: number;
-}
+import ErrorPanel from '@/components/ErrorPanel';
+import { api, ApiError } from '@/services/api';
+import type { AdminProvider, PaginatedResponse, ErrorState } from '@/types';
 
 export default function ProvidersPage() {
-  const [data, setData] = useState<ProvidersResponse | null>(null);
+  const [data, setData] = useState<PaginatedResponse<AdminProvider> | null>(null);
   const [page, setPage] = useState(1);
   const [query, setQuery] = useState('');
+  const [error, setError] = useState<ErrorState | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [formName, setFormName] = useState('');
@@ -33,7 +21,16 @@ export default function ProvidersPage() {
   const load = useCallback(() => {
     const params = new URLSearchParams({ page: String(page), pageSize: '20' });
     if (query) params.set('query', query);
-    api.get<ProvidersResponse>(`/admin/providers?${params}`).then(setData);
+    setError(null);
+    api.get<PaginatedResponse<AdminProvider>>(`/admin/providers?${params}`)
+      .then(setData)
+      .catch((e) => {
+        if (e instanceof ApiError) {
+          setError({ message: e.message, code: e.code, requestId: e.requestId });
+        } else {
+          setError({ message: '데이터를 불러오지 못했습니다.', code: null, requestId: null });
+        }
+      });
   }, [page, query]);
 
   useEffect(() => {
@@ -70,7 +67,7 @@ export default function ProvidersPage() {
     load();
   };
 
-  const startEdit = (p: Provider) => {
+  const startEdit = (p: AdminProvider) => {
     setEditId(p.id);
     setFormName(p.name);
     setFormTags((p.regionTags || []).join(', '));
@@ -149,6 +146,8 @@ export default function ProvidersPage() {
         />
       </div>
 
+      {error && <ErrorPanel error={error} onRetry={load} />}
+
       {!data ? (
         <p className="text-gray-500">로딩 중...</p>
       ) : data.items.length === 0 ? (
@@ -216,7 +215,7 @@ export default function ProvidersPage() {
           <Pagination
             page={data.page}
             total={data.total}
-            pageSize={data.pageSize}
+            pageSize={data.pageSize ?? 20}
             onChange={setPage}
           />
         </>
