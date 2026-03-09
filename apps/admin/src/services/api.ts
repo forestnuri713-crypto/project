@@ -18,6 +18,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
 
   if (!res.ok) {
+    // 401 → 토큰 만료/무효 시 자동 로그아웃 + 로그인 페이지 이동
+    if (res.status === 401 && typeof window !== 'undefined') {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+      throw new ApiError(401, '인증이 만료되었습니다. 다시 로그인해주세요.');
+    }
+
     const body = await res.json().catch(() => ({}));
     const err = body?.error ?? body;
 
