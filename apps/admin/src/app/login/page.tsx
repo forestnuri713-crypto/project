@@ -7,7 +7,7 @@ import { api, ApiError } from '@/services/api';
 
 const KAKAO_JS_KEY = process.env.NEXT_PUBLIC_KAKAO_JS_KEY || '';
 const KAKAO_REDIRECT_URI = process.env.NEXT_PUBLIC_KAKAO_REDIRECT_URI || '';
-const ENABLE_DEV_LOGIN = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_ENABLE_DEV_LOGIN === 'true';
+
 
 declare global {
   interface Window {
@@ -164,24 +164,20 @@ export default function LoginPage() {
           {sdkReady ? '카카오로 로그인' : '로딩 중...'}
         </button>
 
-        {ENABLE_DEV_LOGIN && (
-          <>
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">개발 전용</span>
-              </div>
-            </div>
-            <button
-              onClick={handleDevLogin}
-              className="w-full py-3 bg-gray-800 hover:bg-gray-900 text-white font-medium rounded-lg transition-colors"
-            >
-              개발 모드 로그인 (백엔드 불필요)
-            </button>
-          </>
-        )}
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-300" />
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-2 bg-white text-gray-500">개발 전용</span>
+          </div>
+        </div>
+        <button
+          onClick={handleDevLogin}
+          className="w-full py-3 bg-gray-800 hover:bg-gray-900 text-white font-medium rounded-lg transition-colors"
+        >
+          개발 모드 로그인 (백엔드 불필요)
+        </button>
       </div>
     </div>
   );
