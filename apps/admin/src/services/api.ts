@@ -19,7 +19,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     // 401 → 토큰 만료/무효 시 자동 로그아웃 + 로그인 페이지 이동
-    if (res.status === 401 && typeof window !== 'undefined') {
+    // 인증 엔드포인트 및 개발 모드 토큰은 제외
+    const isAuthEndpoint = path.startsWith('/auth/');
+    const isDevToken = token === 'dev-token';
+    if (res.status === 401 && !isAuthEndpoint && !isDevToken && typeof window !== 'undefined') {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';

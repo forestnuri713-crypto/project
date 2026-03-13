@@ -7,6 +7,7 @@ import { api, ApiError } from '@/services/api';
 
 const KAKAO_JS_KEY = process.env.NEXT_PUBLIC_KAKAO_JS_KEY || '';
 const KAKAO_REDIRECT_URI = process.env.NEXT_PUBLIC_KAKAO_REDIRECT_URI || '';
+const IS_DEV = process.env.NODE_ENV === 'development';
 
 declare global {
   interface Window {
@@ -66,6 +67,11 @@ export default function LoginPage() {
 
     const redirectUri = KAKAO_REDIRECT_URI || `${window.location.origin}/login/callback`;
     window.Kakao.Auth.authorize({ redirectUri });
+  };
+
+  const handleDevLogin = () => {
+    login('dev-token', { id: 'dev', email: 'dev@admin', name: 'Dev Admin', role: 'ADMIN' });
+    router.replace('/');
   };
 
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -157,6 +163,25 @@ export default function LoginPage() {
         >
           {sdkReady ? '카카오로 로그인' : '로딩 중...'}
         </button>
+
+        {IS_DEV && (
+          <>
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-gray-500">개발 전용</span>
+              </div>
+            </div>
+            <button
+              onClick={handleDevLogin}
+              className="w-full py-3 bg-gray-800 hover:bg-gray-900 text-white font-medium rounded-lg transition-colors"
+            >
+              개발 모드 로그인 (백엔드 불필요)
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
