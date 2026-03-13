@@ -7,7 +7,7 @@ import { api, ApiError } from '@/services/api';
 
 const KAKAO_JS_KEY = process.env.NEXT_PUBLIC_KAKAO_JS_KEY || '';
 const KAKAO_REDIRECT_URI = process.env.NEXT_PUBLIC_KAKAO_REDIRECT_URI || '';
-const IS_DEV = process.env.NODE_ENV === 'development';
+const ENABLE_DEV_LOGIN = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_ENABLE_DEV_LOGIN === 'true';
 
 declare global {
   interface Window {
@@ -164,7 +164,7 @@ export default function LoginPage() {
           {sdkReady ? '카카오로 로그인' : '로딩 중...'}
         </button>
 
-        {IS_DEV && (
+        {ENABLE_DEV_LOGIN && (
           <>
             <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
