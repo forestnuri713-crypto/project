@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailLoginDto } from './dto/email-login.dto';
+import { GoogleLoginDto } from './dto/google-login.dto';
 import { KakaoLoginDto } from './dto/kakao-login.dto';
 import { generateUniqueSlug } from '../public/slug.utils';
 
@@ -21,6 +22,13 @@ interface KakaoUserInfo {
       profile_image_url?: string;
     };
   };
+}
+
+interface GoogleUserInfo {
+  id: string;
+  email: string;
+  name: string;
+  picture?: string;
 }
 
 @Injectable()
@@ -88,6 +96,68 @@ export class AuthService {
           });
         } catch {
           // Slug generation is best-effort; user creation still succeeds
+        }
+      }
+    }
+
+    const token = this.generateToken(user);
+    return {
+      accessToken: token,
+      user,
+    };
+  }
+
+  async googleLogin(dto: GoogleLoginDto) {
+    let googleAccessToken: string;
+
+    if (dto.code) {
+      googleAccessToken = await this.exchangeGoogleCode(dto.code, dto.redirectUri!);
+    } else if (dto.accessToken) {
+      googleAccessToken = dto.accessToken;
+    } else {
+      throw new BadRequestException('accessToken 또는 code가 필요합니다');
+    }
+
+    const googleUser = await this.getGoogleUserInfo(googleAccessToken);
+    const googleId = googleUser.id;
+    const email = googleUser.email;
+    const name = googleUser.name || '구글 사용자';
+    const profileImageUrl = googleUser.picture;
+
+    let user = await this.prisma.user.findUnique({ where: { googleId } });
+
+    if (!user) {
+      if (email) {
+        user = await this.prisma.user.findUnique({ where: { email } });
+      }
+
+      if (user) {
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: { googleId, profileImageUrl },
+        });
+      } else {
+        const role = dto.role ?? 'PARENT';
+        user = await this.prisma.user.create({
+          data: {
+            email,
+            googleId,
+            name,
+            profileImageUrl,
+            phoneNumber: '',
+            role,
+            instructorStatus: role === 'INSTRUCTOR' ? 'APPLIED' : 'NONE',
+          },
+        });
+
+        try {
+          const slug = await generateUniqueSlug(this.prisma, user.name, user.id);
+          user = await this.prisma.user.update({
+            where: { id: user.id },
+            data: { slug },
+          });
+        } catch {
+          // Slug generation is best-effort
         }
       }
     }
@@ -188,6 +258,51 @@ export class AuthService {
     }
 
     return data.access_token;
+  }
+
+  private async exchangeGoogleCode(code: string, redirectUri: string): Promise<string> {
+    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
+    const clientSecret = this.configService.get<string>('GOOGLE_CLIENT_SECRET');
+    if (!clientId || !clientSecret) {
+      throw new UnauthorizedException('GOOGLE_CLIENT_ID 또는 GOOGLE_CLIENT_SECRET이 설정되지 않았습니다');
+    }
+
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'authorization_code',
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        code,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      this.logger.error(
+        `구글 토큰 교환 실패: ${response.status} ${JSON.stringify(data)} (redirect_uri: ${redirectUri})`,
+      );
+      throw new UnauthorizedException(
+        `구글 인가 코드 교환에 실패했습니다: ${data.error_description || data.error || response.status}`,
+      );
+    }
+
+    return data.access_token;
+  }
+
+  private async getGoogleUserInfo(accessToken: string): Promise<GoogleUserInfo> {
+    const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!response.ok) {
+      throw new UnauthorizedException('구글 인증에 실패했습니다');
+    }
+
+    return response.json();
   }
 
   private async getKakaoUserInfo(accessToken: string): Promise<KakaoUserInfo> {

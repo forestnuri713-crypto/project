@@ -7,7 +7,8 @@ import { api, ApiError } from '@/services/api';
 
 const KAKAO_JS_KEY = process.env.NEXT_PUBLIC_KAKAO_JS_KEY || '';
 const KAKAO_REDIRECT_URI = process.env.NEXT_PUBLIC_KAKAO_REDIRECT_URI || '';
-
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
+const GOOGLE_REDIRECT_URI = process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI || '';
 
 declare global {
   interface Window {
@@ -67,6 +68,19 @@ export default function LoginPage() {
 
     const redirectUri = KAKAO_REDIRECT_URI || `${window.location.origin}/login/callback`;
     window.Kakao.Auth.authorize({ redirectUri });
+  };
+
+  const handleGoogleLogin = () => {
+    const redirectUri = GOOGLE_REDIRECT_URI || `${window.location.origin}/login/google-callback`;
+    const params = new URLSearchParams({
+      client_id: GOOGLE_CLIENT_ID,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: 'openid email profile',
+      access_type: 'offline',
+      prompt: 'consent',
+    });
+    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
   };
 
   const handleDevLogin = () => {
@@ -156,13 +170,23 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <button
-          onClick={handleKakaoLogin}
-          disabled={!sdkReady}
-          className="w-full py-3 bg-yellow-400 hover:bg-yellow-500 disabled:bg-gray-300 disabled:cursor-not-allowed text-gray-900 font-medium rounded-lg transition-colors"
-        >
-          {sdkReady ? '카카오로 로그인' : '로딩 중...'}
-        </button>
+        <div className="space-y-3">
+          <button
+            onClick={handleKakaoLogin}
+            disabled={!sdkReady}
+            className="w-full py-3 bg-yellow-400 hover:bg-yellow-500 disabled:bg-gray-300 disabled:cursor-not-allowed text-gray-900 font-medium rounded-lg transition-colors"
+          >
+            {sdkReady ? '카카오로 로그인' : '로딩 중...'}
+          </button>
+
+          <button
+            onClick={handleGoogleLogin}
+            disabled={!GOOGLE_CLIENT_ID}
+            className="w-full py-3 bg-white hover:bg-gray-50 disabled:bg-gray-300 disabled:cursor-not-allowed text-gray-700 font-medium rounded-lg border border-gray-300 transition-colors"
+          >
+            구글로 로그인
+          </button>
+        </div>
 
         <div className="relative my-6">
           <div className="absolute inset-0 flex items-center">
