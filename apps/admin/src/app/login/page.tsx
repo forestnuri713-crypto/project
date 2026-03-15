@@ -25,8 +25,8 @@ export default function LoginPage() {
   const [loginLoading, setLoginLoading] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && user?.role === 'ADMIN') {
-      router.replace('/');
+    if (!isLoading && user && ['ADMIN', 'INSTRUCTOR'].includes(user.role)) {
+      router.replace(user.role === 'INSTRUCTOR' ? '/my-programs' : '/');
     }
   }, [user, isLoading, router]);
 
@@ -74,18 +74,28 @@ export default function LoginPage() {
     setLoginLoading(true);
 
     try {
-      const res = await api.post<{ accessToken: string; user: any }>('/auth/login', {
-        email,
-        password,
-      });
+      const res = await api.post<{
+        accessToken: string;
+        user: any;
+        providerMemberships?: any[];
+      }>('/auth/login', { email, password });
 
-      if (res.user.role !== 'ADMIN') {
+      if (!['ADMIN', 'INSTRUCTOR'].includes(res.user.role)) {
         setLoginError('관리자 권한이 없습니다');
         return;
       }
 
-      login(res.accessToken, res.user);
-      router.replace('/');
+      const userData = {
+        ...res.user,
+        providerMemberships: res.providerMemberships ?? [],
+      };
+      login(res.accessToken, userData);
+
+      if (res.user.role === 'INSTRUCTOR') {
+        router.replace('/my-programs');
+      } else {
+        router.replace('/');
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         setLoginError(err.message);

@@ -5,27 +5,35 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 
 const NAV_ITEMS = [
-  { href: '/', label: '대시보드' },
-  { href: '/programs/pending', label: '프로그램 승인' },
-  { href: '/instructors', label: '강사 관리' },
-  { href: '/bulk-cancel', label: '일괄 취소' },
-  { href: '/settlements', label: '정산' },
-  { href: '/users', label: '유저 관리' },
-  { href: '/providers', label: 'Provider' },
-  { href: '/reviews', label: '리뷰 관리' },
+  { href: '/', label: '대시보드', roles: ['ADMIN'] },
+  { href: '/programs/pending', label: '프로그램 승인', roles: ['ADMIN'] },
+  { href: '/instructors', label: '강사 관리', roles: ['ADMIN'] },
+  { href: '/bulk-cancel', label: '일괄 취소', roles: ['ADMIN'] },
+  { href: '/settlements', label: '정산', roles: ['ADMIN'] },
+  { href: '/users', label: '유저 관리', roles: ['ADMIN'] },
+  { href: '/providers', label: 'Provider', roles: ['ADMIN'] },
+  { href: '/reviews', label: '리뷰 관리', roles: ['ADMIN'] },
+  { href: '/my-programs', label: '내 프로그램', roles: ['INSTRUCTOR'] },
+  { href: '/my-provider', label: '내 업체', roles: ['INSTRUCTOR'] },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
+
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => user && item.roles.includes(user.role),
+  );
 
   return (
     <aside className="w-60 bg-gray-900 text-gray-100 min-h-screen flex flex-col">
       <div className="px-6 py-5 border-b border-gray-700">
-        <h1 className="text-lg font-bold tracking-tight">숲똑 Admin</h1>
+        <h1 className="text-lg font-bold tracking-tight">
+          {user?.role === 'INSTRUCTOR' ? '숲똑 업체관리' : '숲똑 Admin'}
+        </h1>
       </div>
       <nav className="flex-1 py-4">
-        {NAV_ITEMS.map((item) => {
+        {visibleItems.map((item) => {
           const isActive =
             item.href === '/'
               ? pathname === '/'

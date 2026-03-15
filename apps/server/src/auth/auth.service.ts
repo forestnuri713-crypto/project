@@ -114,7 +114,21 @@ export class AuthService {
     }
 
     const token = this.generateToken(user);
-    return { accessToken: token, user };
+
+    let providerMemberships: { providerId: string; providerName: string; roleInProvider: string }[] = [];
+    if (user.role === 'INSTRUCTOR') {
+      const members = await this.prisma.providerMember.findMany({
+        where: { userId: user.id, status: 'ACTIVE' },
+        include: { provider: { select: { id: true, name: true } } },
+      });
+      providerMemberships = members.map((m) => ({
+        providerId: m.provider.id,
+        providerName: m.provider.name,
+        roleInProvider: m.roleInProvider,
+      }));
+    }
+
+    return { accessToken: token, user, providerMemberships };
   }
 
   async applyAsInstructor(userId: string) {
