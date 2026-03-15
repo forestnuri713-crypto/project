@@ -32,6 +32,7 @@ function KakaoCallbackContent() {
   useEffect(() => {
     const code = searchParams.get('code');
     const kakaoError = searchParams.get('error');
+    const state = searchParams.get('state');
 
     if (kakaoError) {
       setError('카카오 로그인이 취소되었습니다');
@@ -44,13 +45,16 @@ function KakaoCallbackContent() {
     }
 
     const redirectUri = KAKAO_REDIRECT_URI || `${window.location.origin}/login/callback`;
+    const isSignup = state === 'signup';
 
     (async () => {
       try {
-        const res = await api.post<{ accessToken: string; user: any }>('/auth/kakao', {
-          code,
-          redirectUri,
-        });
+        const body: Record<string, string> = { code, redirectUri };
+        if (isSignup) {
+          body.role = 'ADMIN';
+        }
+
+        const res = await api.post<{ accessToken: string; user: any }>('/auth/kakao', body);
 
         if (res.user.role !== 'ADMIN') {
           setError('관리자 권한이 없습니다');
@@ -63,7 +67,7 @@ function KakaoCallbackContent() {
         if (err instanceof ApiError) {
           setError(err.message);
         } else {
-          setError('로그인에 실패했습니다');
+          setError(isSignup ? '회원가입에 실패했습니다' : '로그인에 실패했습니다');
         }
       }
     })();

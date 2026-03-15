@@ -25,6 +25,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
 
   useEffect(() => {
     if (!isLoading && user?.role === 'ADMIN') {
@@ -68,6 +69,19 @@ export default function LoginPage() {
 
     const redirectUri = KAKAO_REDIRECT_URI || `${window.location.origin}/login/callback`;
     window.Kakao.Auth.authorize({ redirectUri });
+  };
+
+  const handleKakaoSignup = () => {
+    if (!window.Kakao || !window.Kakao.isInitialized()) {
+      setSdkError('Kakao SDK가 로드되지 않았습니다. 페이지를 새로고침 해주세요.');
+      return;
+    }
+
+    const redirectUri = KAKAO_REDIRECT_URI || `${window.location.origin}/login/callback`;
+    window.Kakao.Auth.authorize({
+      redirectUri,
+      state: 'signup',
+    });
   };
 
   const handleGoogleLogin = () => {
@@ -123,7 +137,30 @@ export default function LoginPage() {
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
       <div className="w-full max-w-sm bg-white rounded-lg shadow-md p-8">
         <h1 className="text-2xl font-bold text-center mb-2">숲똑 Admin</h1>
-        <p className="text-sm text-gray-500 text-center mb-8">관리자 로그인</p>
+        <p className="text-sm text-gray-500 text-center mb-4">관리자 로그인</p>
+
+        <div className="flex mb-6 border-b border-gray-200">
+          <button
+            onClick={() => { setMode('login'); setLoginError(''); }}
+            className={`flex-1 pb-2 text-sm font-medium transition-colors ${
+              mode === 'login'
+                ? 'text-green-600 border-b-2 border-green-600'
+                : 'text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            로그인
+          </button>
+          <button
+            onClick={() => { setMode('signup'); setLoginError(''); }}
+            className={`flex-1 pb-2 text-sm font-medium transition-colors ${
+              mode === 'signup'
+                ? 'text-green-600 border-b-2 border-green-600'
+                : 'text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            회원가입
+          </button>
+        </div>
 
         {(sdkError || loginError) && (
           <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded">
@@ -131,77 +168,96 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleEmailLogin} className="space-y-4 mb-6">
-          <div>
-            <input
-              type="email"
-              placeholder="이메일"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
-            />
-          </div>
-          <div>
-            <input
-              type="password"
-              placeholder="비밀번호"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={loginLoading}
-            className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
-          >
-            {loginLoading ? '로그인 중...' : '로그인'}
-          </button>
-        </form>
+        {mode === 'login' ? (
+          <>
+            <form onSubmit={handleEmailLogin} className="space-y-4 mb-6">
+              <div>
+                <input
+                  type="email"
+                  placeholder="이메일"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                />
+              </div>
+              <div>
+                <input
+                  type="password"
+                  placeholder="비밀번호"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loginLoading}
+                className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
+              >
+                {loginLoading ? '로그인 중...' : '로그인'}
+              </button>
+            </form>
 
-        <div className="relative mb-6">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-300" />
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-white text-gray-500">또는</span>
-          </div>
-        </div>
+            <div className="relative mb-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-gray-500">또는</span>
+              </div>
+            </div>
 
-        <div className="space-y-3">
-          <button
-            onClick={handleKakaoLogin}
-            disabled={!sdkReady}
-            className="w-full py-3 bg-yellow-400 hover:bg-yellow-500 disabled:bg-gray-300 disabled:cursor-not-allowed text-gray-900 font-medium rounded-lg transition-colors"
-          >
-            {sdkReady ? '카카오로 로그인' : '로딩 중...'}
-          </button>
+            <div className="space-y-3">
+              <button
+                onClick={handleKakaoLogin}
+                disabled={!sdkReady}
+                className="w-full py-3 bg-yellow-400 hover:bg-yellow-500 disabled:bg-gray-300 disabled:cursor-not-allowed text-gray-900 font-medium rounded-lg transition-colors"
+              >
+                {sdkReady ? '카카오로 로그인' : '로딩 중...'}
+              </button>
 
-          <button
-            onClick={handleGoogleLogin}
-            disabled={!GOOGLE_CLIENT_ID}
-            className="w-full py-3 bg-white hover:bg-gray-50 disabled:bg-gray-300 disabled:cursor-not-allowed text-gray-700 font-medium rounded-lg border border-gray-300 transition-colors"
-          >
-            구글로 로그인
-          </button>
-        </div>
+              <button
+                onClick={handleGoogleLogin}
+                className="w-full py-3 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-lg border border-gray-300 transition-colors"
+              >
+                구글로 로그인
+              </button>
+            </div>
 
-        <div className="relative my-6">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-300" />
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-white text-gray-500">개발 전용</span>
-          </div>
-        </div>
-        <button
-          onClick={handleDevLogin}
-          className="w-full py-3 bg-gray-800 hover:bg-gray-900 text-white font-medium rounded-lg transition-colors"
-        >
-          개발 모드 로그인 (백엔드 불필요)
-        </button>
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-gray-500">개발 전용</span>
+              </div>
+            </div>
+            <button
+              onClick={handleDevLogin}
+              className="w-full py-3 bg-gray-800 hover:bg-gray-900 text-white font-medium rounded-lg transition-colors"
+            >
+              개발 모드 로그인 (백엔드 불필요)
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-gray-500 text-center mb-6">
+              카카오 계정으로 간편하게 회원가입하세요
+            </p>
+
+            <div className="space-y-3">
+              <button
+                onClick={handleKakaoSignup}
+                disabled={!sdkReady}
+                className="w-full py-3 bg-yellow-400 hover:bg-yellow-500 disabled:bg-gray-300 disabled:cursor-not-allowed text-gray-900 font-medium rounded-lg transition-colors"
+              >
+                {sdkReady ? '카카오로 회원가입' : '로딩 중...'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
