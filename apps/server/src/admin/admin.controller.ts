@@ -21,6 +21,7 @@ import { AdminBulkCancelService } from './admin-bulk-cancel.service';
 import { SettlementsService } from '../settlements/settlements.service';
 import { CategoriesService } from '../categories/categories.service';
 import { AdminQueryProgramsDto } from './dto/admin-query-programs.dto';
+import { AdminCreateProgramDto } from './dto/admin-create-program.dto';
 import { RejectProgramDto } from './dto/reject-program.dto';
 import { ChangeRoleDto } from './dto/change-role.dto';
 import { AdminQueryUsersDto } from './dto/admin-query-users.dto';
@@ -71,6 +72,12 @@ export class AdminController {
   @ApiOperation({ summary: '프로그램 목록 (관리자)' })
   findPrograms(@Query() query: AdminQueryProgramsDto) {
     return this.adminService.findPrograms(query);
+  }
+
+  @Post('programs')
+  @ApiOperation({ summary: '프로그램 등록 (관리자)' })
+  createProgram(@Body() dto: AdminCreateProgramDto) {
+    return this.adminService.createProgram(dto);
   }
 
   @Patch('programs/:id/approve')
