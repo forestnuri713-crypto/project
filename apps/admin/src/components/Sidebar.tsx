@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 const NAV_ITEMS = [
   { href: '/', label: '대시보드' },
+  { href: '/programs/new', label: '프로그램 등록' },
   { href: '/programs/pending', label: '프로그램 승인' },
   { href: '/instructors', label: '강사 관리' },
   { href: '/bulk-cancel', label: '일괄 취소' },

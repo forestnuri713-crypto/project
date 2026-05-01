@@ -11,6 +11,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { StorageService } from '../storage/storage.service';
 import { AdminQueryReviewsDto } from './dto/admin-query-reviews.dto';
 import { AdminQueryProgramsDto } from './dto/admin-query-programs.dto';
+import { AdminCreateProgramDto } from './dto/admin-create-program.dto';
 import { RejectProgramDto } from './dto/reject-program.dto';
 import { ChangeRoleDto } from './dto/change-role.dto';
 import { AdminQueryUsersDto } from './dto/admin-query-users.dto';
@@ -93,6 +94,28 @@ export class AdminService {
     ]);
 
     return { items, total, page, limit };
+  }
+
+  async createProgram(dto: AdminCreateProgramDto) {
+    const { instructorId, ...rest } = dto;
+
+    const instructor = await this.prisma.user.findUnique({
+      where: { id: instructorId },
+      select: { id: true, instructorStatus: true },
+    });
+
+    if (!instructor || instructor.instructorStatus !== 'APPROVED') {
+      throw new BadRequestException('승인된 강사만 지정할 수 있습니다');
+    }
+
+    return this.prisma.program.create({
+      data: {
+        ...rest,
+        scheduleAt: new Date(rest.scheduleAt),
+        instructorId,
+        approvalStatus: 'APPROVED',
+      },
+    });
   }
 
   async approveProgram(id: string) {
