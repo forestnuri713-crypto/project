@@ -23,9 +23,8 @@ interface FormState {
   instructorId: string;
   title: string;
   description: string;
+  keywords: string[];
   location: string;
-  latitude: string;
-  longitude: string;
   price: string;
   maxCapacity: string;
   minAge: string;
@@ -39,9 +38,8 @@ const INITIAL: FormState = {
   instructorId: '',
   title: '',
   description: '',
+  keywords: [],
   location: '',
-  latitude: '',
-  longitude: '',
   price: '',
   maxCapacity: '',
   minAge: '',
@@ -50,6 +48,13 @@ const INITIAL: FormState = {
   safetyGuide: '',
   insuranceCovered: false,
 };
+
+const KEYWORD_SUGGESTIONS = [
+  '숲체험', '자연관찰', '곤충관찰', '식물관찰', '나무탐구', '새 관찰',
+  '등산/하이킹', '캠핑', '공예/만들기', '안전교육', '환경교육', '생태교육',
+  '야외놀이', '미술/그림', '음악/노래', '스토리텔링', '협동활동', '신체활동',
+  '가족참여', '계절체험', '체험학습', '농촌체험',
+];
 
 export default function ProgramNewPage() {
   const router = useRouter();
@@ -69,6 +74,15 @@ export default function ProgramNewPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  const toggleKeyword = (kw: string) => {
+    setForm((prev) => ({
+      ...prev,
+      keywords: prev.keywords.includes(kw)
+        ? prev.keywords.filter((k) => k !== kw)
+        : [...prev.keywords, kw],
+    }));
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -82,9 +96,8 @@ export default function ProgramNewPage() {
       instructorId: form.instructorId,
       title: form.title.trim(),
       description: form.description.trim(),
+      keywords: form.keywords,
       location: form.location.trim(),
-      latitude: Number(form.latitude),
-      longitude: Number(form.longitude),
       price: parseInt(form.price, 10),
       maxCapacity: parseInt(form.maxCapacity, 10),
       minAge: parseInt(form.minAge, 10),
@@ -128,7 +141,7 @@ export default function ProgramNewPage() {
           </select>
         </Field>
 
-        <Field label="프로그램명" required>
+        <Field label="프로그램 이름" required>
           <input
             type="text"
             value={form.title}
@@ -138,7 +151,7 @@ export default function ProgramNewPage() {
           />
         </Field>
 
-        <Field label="설명" required>
+        <Field label="프로그램 설명" required>
           <textarea
             value={form.description}
             onChange={(e) => update('description', e.target.value)}
@@ -147,50 +160,56 @@ export default function ProgramNewPage() {
           />
         </Field>
 
-        <Field label="장소" required>
+        <Field label="키워드">
+          <div className="flex flex-wrap gap-2">
+            {KEYWORD_SUGGESTIONS.map((kw) => {
+              const selected = form.keywords.includes(kw);
+              return (
+                <button
+                  key={kw}
+                  type="button"
+                  onClick={() => toggleKeyword(kw)}
+                  className={`px-3 py-1 rounded-full text-xs border transition-colors ${
+                    selected
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {kw}
+                </button>
+              );
+            })}
+          </div>
+          {form.keywords.length > 0 && (
+            <p className="text-xs text-gray-500 mt-2">
+              선택됨: {form.keywords.join(', ')}
+            </p>
+          )}
+        </Field>
+
+        <Field label="판매가 (원)" required>
+          <input
+            type="number"
+            min="0"
+            value={form.price}
+            onChange={(e) => update('price', e.target.value)}
+            className="w-full border rounded px-3 py-2 text-sm"
+            required
+          />
+        </Field>
+
+        <Field label="장소 (도로명주소)" required>
           <input
             type="text"
             value={form.location}
             onChange={(e) => update('location', e.target.value)}
+            placeholder="예: 서울특별시 강남구 도곡로 123"
             className="w-full border rounded px-3 py-2 text-sm"
             required
           />
         </Field>
 
         <div className="grid grid-cols-2 gap-4">
-          <Field label="위도" required>
-            <input
-              type="number"
-              step="any"
-              value={form.latitude}
-              onChange={(e) => update('latitude', e.target.value)}
-              className="w-full border rounded px-3 py-2 text-sm"
-              required
-            />
-          </Field>
-          <Field label="경도" required>
-            <input
-              type="number"
-              step="any"
-              value={form.longitude}
-              onChange={(e) => update('longitude', e.target.value)}
-              className="w-full border rounded px-3 py-2 text-sm"
-              required
-            />
-          </Field>
-        </div>
-
-        <div className="grid grid-cols-3 gap-4">
-          <Field label="가격(원)" required>
-            <input
-              type="number"
-              min="0"
-              value={form.price}
-              onChange={(e) => update('price', e.target.value)}
-              className="w-full border rounded px-3 py-2 text-sm"
-              required
-            />
-          </Field>
           <Field label="정원" required>
             <input
               type="number"
