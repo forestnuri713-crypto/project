@@ -2,9 +2,13 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import * as path from 'path';
+import * as sharp from 'sharp';
 import {
   PROVIDER_COVER_UPLOAD_URL_EXPIRES_IN,
   GALLERY_SIGNED_URL_EXPIRES_IN,
+  GALLERY_UPLOAD_URL_EXPIRES_IN,
+  THUMBNAIL_MAX_WIDTH,
+  THUMBNAIL_QUALITY,
 } from '@sooptalk/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -97,7 +101,7 @@ export class AdminService {
   }
 
   async createProgram(dto: AdminCreateProgramDto) {
-    const { instructorId, ...rest } = dto;
+    const { instructorId, galleryImageKeys, ...rest } = dto;
 
     const instructor = await this.prisma.user.findUnique({
       where: { id: instructorId },
@@ -108,7 +112,7 @@ export class AdminService {
       throw new BadRequestException('승인된 강사만 지정할 수 있습니다');
     }
 
-    return this.prisma.program.create({
+    const program = await this.prisma.program.create({
       data: {
         ...rest,
         scheduleAt: new Date(rest.scheduleAt),
@@ -116,6 +120,55 @@ export class AdminService {
         approvalStatus: 'APPROVED',
       },
     });
+
+    if (galleryImageKeys && galleryImageKeys.length > 0) {
+      await this.createGalleryEntries(program.id, instructorId, galleryImageKeys);
+    }
+
+    return program;
+  }
+
+  async requestProgramUploadUrls(files: { filename: string; contentType: string }[]) {
+    const uploads = await Promise.all(
+      files.map(async (file) => {
+        const ext = path.extname(file.filename);
+        const key = `programs/temp/${randomUUID()}${ext}`;
+        const uploadUrl = await this.storageService.generateUploadUrl(
+          key,
+          file.contentType,
+          GALLERY_UPLOAD_URL_EXPIRES_IN,
+        );
+        return { key, uploadUrl };
+      }),
+    );
+    return { uploads };
+  }
+
+  private async createGalleryEntries(
+    programId: string,
+    uploadedBy: string,
+    imageKeys: string[],
+  ) {
+    await Promise.all(
+      imageKeys.map(async (imageKey) => {
+        const buffer = await this.storageService.downloadObject(imageKey);
+        const thumbnailBuffer = await (sharp as unknown as typeof sharp.default)(buffer)
+          .resize(THUMBNAIL_MAX_WIDTH, null, { withoutEnlargement: true })
+          .jpeg({ quality: THUMBNAIL_QUALITY })
+          .toBuffer();
+
+        const thumbnailKey = imageKey.replace(/(\.[^.]+)$/, '_thumb.jpg');
+        await this.storageService.uploadObject(
+          thumbnailKey,
+          thumbnailBuffer,
+          'image/jpeg',
+        );
+
+        await this.prisma.gallery.create({
+          data: { programId, imageKey, thumbnailKey, uploadedBy },
+        });
+      }),
+    );
   }
 
   async approveProgram(id: string) {
