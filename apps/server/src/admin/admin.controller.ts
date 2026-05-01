@@ -16,8 +16,11 @@ import { UserRole } from '@sooptalk/shared';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { GuideKind } from '@prisma/client';
 import { AdminService } from './admin.service';
 import { AdminBulkCancelService } from './admin-bulk-cancel.service';
+import { GuideTemplatesService } from './guide-templates.service';
+import { UpsertGuideTemplateDto } from './dto/upsert-guide-template.dto';
 import { SettlementsService } from '../settlements/settlements.service';
 import { CategoriesService } from '../categories/categories.service';
 import { AdminQueryProgramsDto } from './dto/admin-query-programs.dto';
@@ -56,6 +59,7 @@ export class AdminController {
     private settlementsService: SettlementsService,
     private bulkCancelService: AdminBulkCancelService,
     private categoriesService: CategoriesService,
+    private guideTemplatesService: GuideTemplatesService,
   ) {}
 
   // ─── Dashboard ───────────────────────────────────────
@@ -313,5 +317,25 @@ export class AdminController {
   @ApiOperation({ summary: '현재 환불 모드 조회' })
   getRefundMode() {
     return this.bulkCancelService.getRefundMode();
+  }
+
+  // ─── Guide Templates ─────────────────────────────────
+
+  @Get('guide-templates')
+  @ApiOperation({ summary: '안내 템플릿 전체 조회' })
+  findGuideTemplates() {
+    return this.guideTemplatesService.findAll();
+  }
+
+  @Get('guide-templates/:kind')
+  @ApiOperation({ summary: '특정 안내 템플릿 조회' })
+  findGuideTemplate(@Param('kind') kind: GuideKind) {
+    return this.guideTemplatesService.findOne(kind);
+  }
+
+  @Put('guide-templates')
+  @ApiOperation({ summary: '안내 템플릿 등록/수정 (kind별 upsert)' })
+  upsertGuideTemplate(@Body() dto: UpsertGuideTemplateDto) {
+    return this.guideTemplatesService.upsert(dto);
   }
 }

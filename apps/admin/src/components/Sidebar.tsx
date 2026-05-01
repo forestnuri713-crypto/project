@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { href: '/users', label: '유저 관리' },
   { href: '/providers', label: 'Provider' },
   { href: '/reviews', label: '리뷰 관리' },
+  { href: '/guide-templates', label: '안내 템플릿' },
 ];
 
 export default function Sidebar() {
