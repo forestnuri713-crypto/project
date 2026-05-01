@@ -29,9 +29,12 @@ interface FormState {
   maxCapacity: string;
   minAge: string;
   scheduleAt: string;
+  bookingDeadlineDays: string;
   isB2b: boolean;
   safetyGuide: string;
   insuranceCovered: boolean;
+  coverImageKey: string | null;
+  galleryImageKeys: string[];
 }
 
 const INITIAL: FormState = {
@@ -44,10 +47,35 @@ const INITIAL: FormState = {
   maxCapacity: '',
   minAge: '',
   scheduleAt: '',
+  bookingDeadlineDays: '',
   isB2b: false,
   safetyGuide: '',
   insuranceCovered: false,
+  coverImageKey: null,
+  galleryImageKeys: [],
 };
+
+interface UploadUrlResponse {
+  uploads: { key: string; uploadUrl: string }[];
+}
+
+async function uploadFiles(files: File[]): Promise<string[]> {
+  const { uploads } = await api.post<UploadUrlResponse>('/admin/programs/upload-url', {
+    files: files.map((f) => ({ filename: f.name, contentType: f.type || 'application/octet-stream' })),
+  });
+  await Promise.all(
+    uploads.map((u, i) =>
+      fetch(u.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': files[i].type || 'application/octet-stream' },
+        body: files[i],
+      }).then((res) => {
+        if (!res.ok) throw new Error(`이미지 업로드 실패: ${files[i].name}`);
+      }),
+    ),
+  );
+  return uploads.map((u) => u.key);
+}
 
 const KEYWORD_SUGGESTIONS = [
   '숲체험', '자연관찰', '곤충관찰', '식물관찰', '나무탐구', '새 관찰',
@@ -83,6 +111,48 @@ export default function ProgramNewPage() {
     }));
   };
 
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [uploadingGallery, setUploadingGallery] = useState(false);
+
+  const handleCoverChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+    setUploadingCover(true);
+    try {
+      const [key] = await uploadFiles([file]);
+      update('coverImageKey', key);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '대표 이미지 업로드 실패');
+    } finally {
+      setUploadingCover(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleGalleryChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    setError(null);
+    setUploadingGallery(true);
+    try {
+      const keys = await uploadFiles(files);
+      setForm((prev) => ({ ...prev, galleryImageKeys: [...prev.galleryImageKeys, ...keys] }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '이미지 업로드 실패');
+    } finally {
+      setUploadingGallery(false);
+      e.target.value = '';
+    }
+  };
+
+  const removeGalleryKey = (key: string) => {
+    setForm((prev) => ({
+      ...prev,
+      galleryImageKeys: prev.galleryImageKeys.filter((k) => k !== key),
+    }));
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -105,6 +175,11 @@ export default function ProgramNewPage() {
       isB2b: form.isB2b,
       insuranceCovered: form.insuranceCovered,
       ...(form.safetyGuide.trim() ? { safetyGuide: form.safetyGuide.trim() } : {}),
+      ...(form.coverImageKey ? { coverImageKey: form.coverImageKey } : {}),
+      ...(form.galleryImageKeys.length > 0 ? { galleryImageKeys: form.galleryImageKeys } : {}),
+      ...(form.bookingDeadlineDays
+        ? { bookingDeadlineDays: parseInt(form.bookingDeadlineDays, 10) }
+        : {}),
     };
 
     setSubmitting(true);
@@ -240,6 +315,72 @@ export default function ProgramNewPage() {
             className="w-full border rounded px-3 py-2 text-sm"
             required
           />
+        </Field>
+
+        <Field label="예약 마감일">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">활동</span>
+            <input
+              type="number"
+              min="0"
+              value={form.bookingDeadlineDays}
+              onChange={(e) => update('bookingDeadlineDays', e.target.value)}
+              className="w-24 border rounded px-3 py-2 text-sm"
+              placeholder="3"
+            />
+            <span className="text-sm text-gray-500">일 전까지 예약 가능</span>
+          </div>
+        </Field>
+
+        <Field label="대표 이미지">
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleCoverChange}
+            disabled={uploadingCover}
+            className="block text-sm"
+          />
+          {uploadingCover && <p className="text-xs text-gray-500 mt-1">업로드 중...</p>}
+          {form.coverImageKey && (
+            <p className="text-xs text-green-600 mt-1">
+              업로드 완료 ({form.coverImageKey.split('/').pop()})
+              <button
+                type="button"
+                onClick={() => update('coverImageKey', null)}
+                className="ml-2 text-red-600 underline"
+              >
+                제거
+              </button>
+            </p>
+          )}
+        </Field>
+
+        <Field label="개별 이미지 (다중 선택 가능)">
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleGalleryChange}
+            disabled={uploadingGallery}
+            className="block text-sm"
+          />
+          {uploadingGallery && <p className="text-xs text-gray-500 mt-1">업로드 중...</p>}
+          {form.galleryImageKeys.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {form.galleryImageKeys.map((key) => (
+                <li key={key} className="text-xs text-gray-700 flex items-center gap-2">
+                  <span className="truncate flex-1">{key.split('/').pop()}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeGalleryKey(key)}
+                    className="text-red-600 underline"
+                  >
+                    제거
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </Field>
 
         <Field label="안전 가이드">

@@ -67,4 +67,21 @@ export class CreateProgramDto {
   @IsArray()
   @IsString({ each: true })
   keywords?: string[];
+
+  @ApiPropertyOptional({ description: '대표 이미지 S3 키' })
+  @IsOptional()
+  @IsString()
+  coverImageKey?: string;
+
+  @ApiPropertyOptional({ description: '갤러리 이미지 S3 키 목록' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  galleryImageKeys?: string[];
+
+  @ApiPropertyOptional({ example: 3, description: '예약 마감일 (활동 N일 전)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  bookingDeadlineDays?: number;
 }

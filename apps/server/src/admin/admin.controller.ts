@@ -25,6 +25,7 @@ import { SettlementsService } from '../settlements/settlements.service';
 import { CategoriesService } from '../categories/categories.service';
 import { AdminQueryProgramsDto } from './dto/admin-query-programs.dto';
 import { AdminCreateProgramDto } from './dto/admin-create-program.dto';
+import { AdminUploadUrlDto } from './dto/admin-upload-url.dto';
 import { RejectProgramDto } from './dto/reject-program.dto';
 import { ChangeRoleDto } from './dto/change-role.dto';
 import { AdminQueryUsersDto } from './dto/admin-query-users.dto';
@@ -82,6 +83,12 @@ export class AdminController {
   @ApiOperation({ summary: '프로그램 등록 (관리자)' })
   createProgram(@Body() dto: AdminCreateProgramDto) {
     return this.adminService.createProgram(dto);
+  }
+
+  @Post('programs/upload-url')
+  @ApiOperation({ summary: '프로그램 이미지 업로드 URL (관리자)' })
+  requestProgramUploadUrls(@Body() dto: AdminUploadUrlDto) {
+    return this.adminService.requestProgramUploadUrls(dto.files);
   }
 
   @Patch('programs/:id/approve')
