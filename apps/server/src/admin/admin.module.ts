@@ -5,11 +5,12 @@ import { PaymentsModule } from '../payments/payments.module';
 import { CategoriesModule } from '../categories/categories.module';
 import { AdminService } from './admin.service';
 import { AdminBulkCancelService } from './admin-bulk-cancel.service';
+import { GuideTemplatesService } from './guide-templates.service';
 import { AdminController } from './admin.controller';
 
 @Module({
   imports: [NotificationsModule, SettlementsModule, PaymentsModule, CategoriesModule],
   controllers: [AdminController],
-  providers: [AdminService, AdminBulkCancelService],
+  providers: [AdminService, AdminBulkCancelService, GuideTemplatesService],
 })
 export class AdminModule {}

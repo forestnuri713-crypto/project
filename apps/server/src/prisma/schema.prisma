@@ -531,3 +531,20 @@ model SlugHistory {
 
   @@map("slug_histories")
 }
+
+enum GuideKind {
+  SAFETY
+  PAYMENT
+  CANCEL
+  INQUIRY
+}
+
+model GuideTemplate {
+  id        String    @id @default(uuid())
+  kind      GuideKind @unique
+  content   String
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@map("guide_templates")
+}
