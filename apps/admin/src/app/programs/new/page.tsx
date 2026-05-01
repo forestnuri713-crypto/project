@@ -19,6 +19,29 @@ interface InstructorsResponse {
   limit: number;
 }
 
+interface OptionRow {
+  name: string;
+  priceDiff: string;
+  capacity: string;
+}
+
+type ScheduleMode = 'SINGLE' | 'RECURRING';
+type RecurrenceFrequency = 'WEEKLY' | 'MONTHLY';
+type EndMode = 'BY_DATE' | 'BY_COUNT';
+
+interface RecurrenceState {
+  frequency: RecurrenceFrequency;
+  startDate: string;
+  startTime: string;
+  endTime: string;
+  endMode: EndMode;
+  endDate: string;
+  count: string;
+  daysOfWeek: number[];
+  dayOfMonth: string;
+  capacity: string;
+}
+
 interface FormState {
   instructorId: string;
   title: string;
@@ -28,14 +51,30 @@ interface FormState {
   price: string;
   maxCapacity: string;
   minAge: string;
+  scheduleMode: ScheduleMode;
   scheduleAt: string;
+  recurrence: RecurrenceState;
   bookingDeadlineDays: string;
   isB2b: boolean;
   safetyGuide: string;
   insuranceCovered: boolean;
   coverImageKey: string | null;
   galleryImageKeys: string[];
+  options: OptionRow[];
 }
+
+const INITIAL_RECURRENCE: RecurrenceState = {
+  frequency: 'WEEKLY',
+  startDate: '',
+  startTime: '10:00',
+  endTime: '',
+  endMode: 'BY_DATE',
+  endDate: '',
+  count: '',
+  daysOfWeek: [],
+  dayOfMonth: '',
+  capacity: '',
+};
 
 const INITIAL: FormState = {
   instructorId: '',
@@ -46,14 +85,19 @@ const INITIAL: FormState = {
   price: '',
   maxCapacity: '',
   minAge: '',
+  scheduleMode: 'SINGLE',
   scheduleAt: '',
+  recurrence: INITIAL_RECURRENCE,
   bookingDeadlineDays: '',
   isB2b: false,
   safetyGuide: '',
   insuranceCovered: false,
   coverImageKey: null,
   galleryImageKeys: [],
+  options: [],
 };
+
+const DOW_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 
 interface UploadUrlResponse {
   uploads: { key: string; uploadUrl: string }[];
@@ -153,6 +197,41 @@ export default function ProgramNewPage() {
     }));
   };
 
+  const updateRecurrence = <K extends keyof RecurrenceState>(
+    key: K,
+    value: RecurrenceState[K],
+  ) => {
+    setForm((prev) => ({ ...prev, recurrence: { ...prev.recurrence, [key]: value } }));
+  };
+
+  const toggleDow = (d: number) => {
+    setForm((prev) => {
+      const has = prev.recurrence.daysOfWeek.includes(d);
+      const next = has
+        ? prev.recurrence.daysOfWeek.filter((x) => x !== d)
+        : [...prev.recurrence.daysOfWeek, d].sort();
+      return { ...prev, recurrence: { ...prev.recurrence, daysOfWeek: next } };
+    });
+  };
+
+  const addOption = () =>
+    setForm((prev) => ({
+      ...prev,
+      options: [...prev.options, { name: '', priceDiff: '', capacity: '' }],
+    }));
+
+  const removeOption = (idx: number) =>
+    setForm((prev) => ({
+      ...prev,
+      options: prev.options.filter((_, i) => i !== idx),
+    }));
+
+  const updateOption = (idx: number, key: keyof OptionRow, value: string) =>
+    setForm((prev) => ({
+      ...prev,
+      options: prev.options.map((o, i) => (i === idx ? { ...o, [key]: value } : o)),
+    }));
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -161,6 +240,55 @@ export default function ProgramNewPage() {
       setError('강사를 선택해주세요');
       return;
     }
+
+    let recurrencePayload: object | null = null;
+    if (form.scheduleMode === 'RECURRING') {
+      const r = form.recurrence;
+      if (!r.startDate) {
+        setError('반복 시작일을 입력해주세요');
+        return;
+      }
+      if (!r.capacity) {
+        setError('회차당 정원을 입력해주세요');
+        return;
+      }
+      if (r.endMode === 'BY_DATE' && !r.endDate) {
+        setError('반복 종료일을 입력해주세요');
+        return;
+      }
+      if (r.endMode === 'BY_COUNT' && !r.count) {
+        setError('반복 횟수를 입력해주세요');
+        return;
+      }
+      if (r.frequency === 'WEEKLY' && r.daysOfWeek.length === 0) {
+        setError('주간 반복은 최소 1개 요일을 선택해주세요');
+        return;
+      }
+      recurrencePayload = {
+        frequency: r.frequency,
+        startDate: r.startDate,
+        startTime: r.startTime,
+        ...(r.endTime ? { endTime: r.endTime } : {}),
+        ...(r.endMode === 'BY_DATE' && r.endDate ? { endDate: r.endDate } : {}),
+        ...(r.endMode === 'BY_COUNT' && r.count ? { count: parseInt(r.count, 10) } : {}),
+        ...(r.frequency === 'WEEKLY' ? { daysOfWeek: r.daysOfWeek } : {}),
+        ...(r.frequency === 'MONTHLY' && r.dayOfMonth
+          ? { dayOfMonth: parseInt(r.dayOfMonth, 10) }
+          : {}),
+        capacity: parseInt(r.capacity, 10),
+      };
+    } else if (!form.scheduleAt) {
+      setError('진행 일시를 입력해주세요');
+      return;
+    }
+
+    const optionsPayload = form.options
+      .filter((o) => o.name.trim())
+      .map((o) => ({
+        name: o.name.trim(),
+        ...(o.priceDiff ? { priceDiff: parseInt(o.priceDiff, 10) } : {}),
+        ...(o.capacity ? { capacity: parseInt(o.capacity, 10) } : {}),
+      }));
 
     const payload = {
       instructorId: form.instructorId,
@@ -171,7 +299,10 @@ export default function ProgramNewPage() {
       price: parseInt(form.price, 10),
       maxCapacity: parseInt(form.maxCapacity, 10),
       minAge: parseInt(form.minAge, 10),
-      scheduleAt: new Date(form.scheduleAt).toISOString(),
+      ...(form.scheduleMode === 'SINGLE'
+        ? { scheduleAt: new Date(form.scheduleAt).toISOString() }
+        : {}),
+      ...(recurrencePayload ? { recurrence: recurrencePayload } : {}),
       isB2b: form.isB2b,
       insuranceCovered: form.insuranceCovered,
       ...(form.safetyGuide.trim() ? { safetyGuide: form.safetyGuide.trim() } : {}),
@@ -180,6 +311,7 @@ export default function ProgramNewPage() {
       ...(form.bookingDeadlineDays
         ? { bookingDeadlineDays: parseInt(form.bookingDeadlineDays, 10) }
         : {}),
+      ...(optionsPayload.length > 0 ? { options: optionsPayload } : {}),
     };
 
     setSubmitting(true);
@@ -307,14 +439,209 @@ export default function ProgramNewPage() {
           </Field>
         </div>
 
-        <Field label="진행 일시" required>
-          <input
-            type="datetime-local"
-            value={form.scheduleAt}
-            onChange={(e) => update('scheduleAt', e.target.value)}
-            className="w-full border rounded px-3 py-2 text-sm"
-            required
-          />
+        <Field label="일정 유형" required>
+          <div className="flex gap-4 text-sm">
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                checked={form.scheduleMode === 'SINGLE'}
+                onChange={() => update('scheduleMode', 'SINGLE')}
+              />
+              단일 일정
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                checked={form.scheduleMode === 'RECURRING'}
+                onChange={() => update('scheduleMode', 'RECURRING')}
+              />
+              반복 일정
+            </label>
+          </div>
+        </Field>
+
+        {form.scheduleMode === 'SINGLE' ? (
+          <Field label="진행 일시" required>
+            <input
+              type="datetime-local"
+              value={form.scheduleAt}
+              onChange={(e) => update('scheduleAt', e.target.value)}
+              className="w-full border rounded px-3 py-2 text-sm"
+              required
+            />
+          </Field>
+        ) : (
+          <div className="border rounded-lg p-4 space-y-4 bg-gray-50">
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="반복 주기">
+                <select
+                  value={form.recurrence.frequency}
+                  onChange={(e) =>
+                    updateRecurrence('frequency', e.target.value as RecurrenceFrequency)
+                  }
+                  className="w-full border rounded px-3 py-2 text-sm"
+                >
+                  <option value="WEEKLY">매주</option>
+                  <option value="MONTHLY">매월</option>
+                </select>
+              </Field>
+              <Field label="회차당 정원" required>
+                <input
+                  type="number"
+                  min="1"
+                  value={form.recurrence.capacity}
+                  onChange={(e) => updateRecurrence('capacity', e.target.value)}
+                  className="w-full border rounded px-3 py-2 text-sm"
+                />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <Field label="시작일" required>
+                <input
+                  type="date"
+                  value={form.recurrence.startDate}
+                  onChange={(e) => updateRecurrence('startDate', e.target.value)}
+                  className="w-full border rounded px-3 py-2 text-sm"
+                />
+              </Field>
+              <Field label="시작 시각" required>
+                <input
+                  type="time"
+                  value={form.recurrence.startTime}
+                  onChange={(e) => updateRecurrence('startTime', e.target.value)}
+                  className="w-full border rounded px-3 py-2 text-sm"
+                />
+              </Field>
+              <Field label="종료 시각">
+                <input
+                  type="time"
+                  value={form.recurrence.endTime}
+                  onChange={(e) => updateRecurrence('endTime', e.target.value)}
+                  className="w-full border rounded px-3 py-2 text-sm"
+                />
+              </Field>
+            </div>
+
+            {form.recurrence.frequency === 'WEEKLY' ? (
+              <Field label="요일 (다중 선택)">
+                <div className="flex gap-2">
+                  {DOW_LABELS.map((label, i) => {
+                    const selected = form.recurrence.daysOfWeek.includes(i);
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => toggleDow(i)}
+                        className={`w-10 h-10 rounded-full text-sm border ${
+                          selected
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'bg-white text-gray-700 border-gray-300'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </Field>
+            ) : (
+              <Field label="매월 일자 (1~28)">
+                <input
+                  type="number"
+                  min="1"
+                  max="28"
+                  value={form.recurrence.dayOfMonth}
+                  onChange={(e) => updateRecurrence('dayOfMonth', e.target.value)}
+                  className="w-32 border rounded px-3 py-2 text-sm"
+                  placeholder="비우면 시작일과 동일"
+                />
+              </Field>
+            )}
+
+            <Field label="종료 조건" required>
+              <div className="flex gap-4 text-sm mb-2">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    checked={form.recurrence.endMode === 'BY_DATE'}
+                    onChange={() => updateRecurrence('endMode', 'BY_DATE')}
+                  />
+                  종료일 지정
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    checked={form.recurrence.endMode === 'BY_COUNT'}
+                    onChange={() => updateRecurrence('endMode', 'BY_COUNT')}
+                  />
+                  횟수 지정
+                </label>
+              </div>
+              {form.recurrence.endMode === 'BY_DATE' ? (
+                <input
+                  type="date"
+                  value={form.recurrence.endDate}
+                  onChange={(e) => updateRecurrence('endDate', e.target.value)}
+                  className="w-full border rounded px-3 py-2 text-sm"
+                />
+              ) : (
+                <input
+                  type="number"
+                  min="1"
+                  value={form.recurrence.count}
+                  onChange={(e) => updateRecurrence('count', e.target.value)}
+                  className="w-32 border rounded px-3 py-2 text-sm"
+                  placeholder="총 횟수"
+                />
+              )}
+            </Field>
+          </div>
+        )}
+
+        <Field label="옵션 (선택 사항)">
+          <div className="space-y-2">
+            {form.options.map((o, idx) => (
+              <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                <input
+                  type="text"
+                  placeholder="옵션명 (예: 오전반)"
+                  value={o.name}
+                  onChange={(e) => updateOption(idx, 'name', e.target.value)}
+                  className="col-span-5 border rounded px-3 py-2 text-sm"
+                />
+                <input
+                  type="number"
+                  placeholder="가격 차이"
+                  value={o.priceDiff}
+                  onChange={(e) => updateOption(idx, 'priceDiff', e.target.value)}
+                  className="col-span-3 border rounded px-3 py-2 text-sm"
+                />
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="정원"
+                  value={o.capacity}
+                  onChange={(e) => updateOption(idx, 'capacity', e.target.value)}
+                  className="col-span-3 border rounded px-3 py-2 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeOption(idx)}
+                  className="col-span-1 text-red-600 text-sm"
+                >
+                  삭제
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={addOption}
+              className="text-sm text-blue-600 hover:underline"
+            >
+              + 옵션 추가
+            </button>
+          </div>
         </Field>
 
         <Field label="예약 마감일">

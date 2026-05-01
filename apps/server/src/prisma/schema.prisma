@@ -197,6 +197,7 @@ model Program {
   reviews        Review[]
   bulkCancelJobs BulkCancelJob[]
   categories     ProgramCategory[]
+  options        ProgramOption[]
 
   @@index([approvalStatus])
   @@map("programs")
@@ -532,6 +533,20 @@ model SlugHistory {
   user User @relation(fields: [userId], references: [id])
 
   @@map("slug_histories")
+}
+
+model ProgramOption {
+  id        String   @id @default(uuid())
+  programId String   @map("program_id")
+  name      String
+  priceDiff Int      @default(0) @map("price_diff")
+  capacity  Int?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@map("program_options")
 }
 
 enum GuideKind {
