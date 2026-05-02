@@ -55,8 +55,26 @@ export class CreateProgramDto {
   @ApiPropertyOptional({ example: '야외 활동 시 안전모 착용 필수, 우천 시 실내 대체 활동 진행', description: '안전 가이드' })
   @IsOptional()
   @IsString()
-  @MaxLength(500)
+  @MaxLength(5000)
   safetyGuide?: string;
+
+  @ApiPropertyOptional({ description: '결제 안내' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(5000)
+  paymentGuide?: string;
+
+  @ApiPropertyOptional({ description: '취소 안내' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(5000)
+  cancelGuide?: string;
+
+  @ApiPropertyOptional({ description: '문의 안내' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(5000)
+  inquiryGuide?: string;
 
   @ApiPropertyOptional({ example: true, description: '보험 적용 여부' })
   @IsOptional()
