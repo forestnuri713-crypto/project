@@ -42,9 +42,10 @@ export class CreateProgramDto {
   @Min(0)
   minAge: number;
 
-  @ApiProperty({ example: '2025-06-15T10:00:00.000Z' })
+  @ApiPropertyOptional({ example: '2025-06-15T10:00:00.000Z', description: '단일 일정. 반복 일정 사용 시 생략 가능 (관리자 전용).' })
+  @IsOptional()
   @IsDateString()
-  scheduleAt: string;
+  scheduleAt?: string;
 
   @ApiPropertyOptional({ example: false, description: 'B2B 프로그램 여부' })
   @IsOptional()

@@ -30,6 +30,7 @@ import { AdminUpsertProfileDto } from './dto/admin-upsert-profile.dto';
 import { PresignCoverDto } from '../providers/dto/presign-cover.dto';
 import { PublishProfileDto } from '../providers/dto/publish-profile.dto';
 import { refreshProgramReviewStats } from '../reviews/review-stats.util';
+import { expandRecurrence } from './recurrence.util';
 
 @Injectable()
 export class AdminService {
@@ -101,7 +102,7 @@ export class AdminService {
   }
 
   async createProgram(dto: AdminCreateProgramDto) {
-    const { instructorId, galleryImageKeys, ...rest } = dto;
+    const { instructorId, galleryImageKeys, options, recurrence, ...rest } = dto;
 
     const instructor = await this.prisma.user.findUnique({
       where: { id: instructorId },
@@ -112,14 +113,58 @@ export class AdminService {
       throw new BadRequestException('승인된 강사만 지정할 수 있습니다');
     }
 
+    if (!rest.scheduleAt && !recurrence) {
+      throw new BadRequestException('단일 일정 또는 반복 일정 중 하나는 필수입니다');
+    }
+
+    let occurrences: { startAt: Date; endAt: Date | null }[] = [];
+    if (recurrence) {
+      try {
+        occurrences = expandRecurrence(recurrence);
+      } catch (err) {
+        throw new BadRequestException(
+          err instanceof Error ? err.message : '반복 일정 설정이 올바르지 않습니다',
+        );
+      }
+      if (occurrences.length === 0) {
+        throw new BadRequestException('생성될 반복 일정이 없습니다');
+      }
+    }
+
+    const primaryScheduleAt =
+      occurrences.length > 0 ? occurrences[0].startAt : new Date(rest.scheduleAt!);
+
     const program = await this.prisma.program.create({
       data: {
         ...rest,
-        scheduleAt: new Date(rest.scheduleAt),
+        scheduleAt: primaryScheduleAt,
         instructorId,
         approvalStatus: 'APPROVED',
       },
     });
+
+    if (options && options.length > 0) {
+      await this.prisma.programOption.createMany({
+        data: options.map((o) => ({
+          programId: program.id,
+          name: o.name,
+          priceDiff: o.priceDiff ?? 0,
+          capacity: o.capacity ?? null,
+        })),
+      });
+    }
+
+    if (occurrences.length > 0) {
+      await this.prisma.programSchedule.createMany({
+        data: occurrences.map((o) => ({
+          programId: program.id,
+          startAt: o.startAt,
+          endAt: o.endAt,
+          capacity: recurrence!.capacity,
+          remainingCapacity: recurrence!.capacity,
+        })),
+      });
+    }
 
     if (galleryImageKeys && galleryImageKeys.length > 0) {
       await this.createGalleryEntries(program.id, instructorId, galleryImageKeys);
