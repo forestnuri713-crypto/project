@@ -56,11 +56,31 @@ interface FormState {
   recurrence: RecurrenceState;
   bookingDeadlineDays: string;
   isB2b: boolean;
-  safetyGuide: string;
+  safetyGuide: GuideField;
+  paymentGuide: GuideField;
+  cancelGuide: GuideField;
+  inquiryGuide: GuideField;
   insuranceCovered: boolean;
   coverImageKey: string | null;
   galleryImageKeys: string[];
   options: OptionRow[];
+}
+
+type GuideKind = 'SAFETY' | 'PAYMENT' | 'CANCEL' | 'INQUIRY';
+
+type GuideMode = 'DEFAULT' | 'CUSTOM';
+
+interface GuideField {
+  mode: GuideMode;
+  custom: string;
+}
+
+const INITIAL_GUIDE: GuideField = { mode: 'DEFAULT', custom: '' };
+
+interface GuideTemplate {
+  id: string;
+  kind: GuideKind;
+  content: string;
 }
 
 const INITIAL_RECURRENCE: RecurrenceState = {
@@ -90,7 +110,10 @@ const INITIAL: FormState = {
   recurrence: INITIAL_RECURRENCE,
   bookingDeadlineDays: '',
   isB2b: false,
-  safetyGuide: '',
+  safetyGuide: INITIAL_GUIDE,
+  paymentGuide: INITIAL_GUIDE,
+  cancelGuide: INITIAL_GUIDE,
+  inquiryGuide: INITIAL_GUIDE,
   insuranceCovered: false,
   coverImageKey: null,
   galleryImageKeys: [],
@@ -134,13 +157,46 @@ export default function ProgramNewPage() {
   const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<Record<GuideKind, string>>({
+    SAFETY: '',
+    PAYMENT: '',
+    CANCEL: '',
+    INQUIRY: '',
+  });
 
   useEffect(() => {
     api
       .get<InstructorsResponse>('/admin/instructors?status=APPROVED&page=1&limit=100')
       .then((res) => setInstructors(res.items))
       .catch(() => setInstructors([]));
+    api
+      .get<GuideTemplate[]>('/admin/guide-templates')
+      .then((rows) => {
+        const next: Record<GuideKind, string> = {
+          SAFETY: '',
+          PAYMENT: '',
+          CANCEL: '',
+          INQUIRY: '',
+        };
+        rows.forEach((r) => {
+          next[r.kind] = r.content;
+        });
+        setTemplates(next);
+      })
+      .catch(() => {});
   }, []);
+
+  const updateGuide = (
+    key: 'safetyGuide' | 'paymentGuide' | 'cancelGuide' | 'inquiryGuide',
+    patch: Partial<GuideField>,
+  ) => {
+    setForm((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+  };
+
+  const resolveGuide = (kind: GuideKind, field: GuideField): string => {
+    if (field.mode === 'CUSTOM') return field.custom.trim();
+    return templates[kind];
+  };
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -305,7 +361,18 @@ export default function ProgramNewPage() {
       ...(recurrencePayload ? { recurrence: recurrencePayload } : {}),
       isB2b: form.isB2b,
       insuranceCovered: form.insuranceCovered,
-      ...(form.safetyGuide.trim() ? { safetyGuide: form.safetyGuide.trim() } : {}),
+      ...(resolveGuide('SAFETY', form.safetyGuide)
+        ? { safetyGuide: resolveGuide('SAFETY', form.safetyGuide) }
+        : {}),
+      ...(resolveGuide('PAYMENT', form.paymentGuide)
+        ? { paymentGuide: resolveGuide('PAYMENT', form.paymentGuide) }
+        : {}),
+      ...(resolveGuide('CANCEL', form.cancelGuide)
+        ? { cancelGuide: resolveGuide('CANCEL', form.cancelGuide) }
+        : {}),
+      ...(resolveGuide('INQUIRY', form.inquiryGuide)
+        ? { inquiryGuide: resolveGuide('INQUIRY', form.inquiryGuide) }
+        : {}),
       ...(form.coverImageKey ? { coverImageKey: form.coverImageKey } : {}),
       ...(form.galleryImageKeys.length > 0 ? { galleryImageKeys: form.galleryImageKeys } : {}),
       ...(form.bookingDeadlineDays
@@ -710,15 +777,34 @@ export default function ProgramNewPage() {
           )}
         </Field>
 
-        <Field label="안전 가이드">
-          <textarea
-            value={form.safetyGuide}
-            onChange={(e) => update('safetyGuide', e.target.value)}
-            maxLength={500}
-            className="w-full border rounded px-3 py-2 text-sm min-h-[80px]"
-            placeholder="최대 500자"
-          />
-        </Field>
+        <GuideSection
+          label="안전 가이드"
+          formKey="safetyGuide"
+          field={form.safetyGuide}
+          template={templates.SAFETY}
+          onChange={updateGuide}
+        />
+        <GuideSection
+          label="결제 안내"
+          formKey="paymentGuide"
+          field={form.paymentGuide}
+          template={templates.PAYMENT}
+          onChange={updateGuide}
+        />
+        <GuideSection
+          label="취소 안내"
+          formKey="cancelGuide"
+          field={form.cancelGuide}
+          template={templates.CANCEL}
+          onChange={updateGuide}
+        />
+        <GuideSection
+          label="문의 안내"
+          formKey="inquiryGuide"
+          field={form.inquiryGuide}
+          template={templates.INQUIRY}
+          onChange={updateGuide}
+        />
 
         <div className="flex gap-6">
           <label className="flex items-center gap-2 text-sm">
@@ -779,5 +865,62 @@ function Field({
       </label>
       {children}
     </div>
+  );
+}
+
+function GuideSection({
+  label,
+  formKey,
+  field,
+  template,
+  onChange,
+}: {
+  label: string;
+  formKey: 'safetyGuide' | 'paymentGuide' | 'cancelGuide' | 'inquiryGuide';
+  field: GuideField;
+  template: string;
+  onChange: (
+    key: 'safetyGuide' | 'paymentGuide' | 'cancelGuide' | 'inquiryGuide',
+    patch: Partial<GuideField>,
+  ) => void;
+}) {
+  const hasTemplate = template.trim().length > 0;
+  return (
+    <Field label={label}>
+      <div className="flex gap-4 text-sm mb-2">
+        <label className="flex items-center gap-2">
+          <input
+            type="radio"
+            checked={field.mode === 'DEFAULT'}
+            onChange={() => onChange(formKey, { mode: 'DEFAULT' })}
+          />
+          기본 정보 사용
+          {!hasTemplate && (
+            <span className="text-xs text-gray-400">(템플릿 미설정)</span>
+          )}
+        </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="radio"
+            checked={field.mode === 'CUSTOM'}
+            onChange={() => onChange(formKey, { mode: 'CUSTOM' })}
+          />
+          직접 등록
+        </label>
+      </div>
+      {field.mode === 'DEFAULT' ? (
+        <div className="text-xs text-gray-600 bg-gray-50 border rounded p-3 whitespace-pre-wrap min-h-[60px]">
+          {hasTemplate ? template : '안내 템플릿 메뉴에서 기본 본문을 등록해주세요.'}
+        </div>
+      ) : (
+        <textarea
+          value={field.custom}
+          onChange={(e) => onChange(formKey, { custom: e.target.value })}
+          maxLength={5000}
+          className="w-full border rounded px-3 py-2 text-sm min-h-[100px]"
+          placeholder="직접 입력"
+        />
+      )}
+    </Field>
   );
 }
