@@ -211,6 +211,35 @@ export default function ProgramNewPage() {
     }));
   };
 
+  const [recommendedKeywords, setRecommendedKeywords] = useState<string[]>([]);
+  const [recommending, setRecommending] = useState(false);
+
+  const handleRecommendKeywords = async () => {
+    const description = form.description.trim();
+    if (description.length < 10) {
+      setError('설명을 10자 이상 입력한 뒤 다시 시도해주세요');
+      return;
+    }
+    setError(null);
+    setRecommending(true);
+    try {
+      const { keywords } = await api.post<{ keywords: string[] }>(
+        '/admin/programs/keywords/recommend',
+        { description },
+      );
+      setRecommendedKeywords(keywords);
+      setForm((prev) => ({
+        ...prev,
+        keywords: Array.from(new Set([...prev.keywords, ...keywords])),
+      }));
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : '키워드 추천에 실패했습니다';
+      setError(message);
+    } finally {
+      setRecommending(false);
+    }
+  };
+
   const [uploadingCover, setUploadingCover] = useState(false);
   const [uploadingGallery, setUploadingGallery] = useState(false);
 
@@ -435,6 +464,45 @@ export default function ProgramNewPage() {
         </Field>
 
         <Field label="키워드">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-gray-500">
+              아래 추천 또는 직접 입력한 설명을 기반으로 키워드를 선택하세요.
+            </p>
+            <button
+              type="button"
+              onClick={handleRecommendKeywords}
+              disabled={recommending}
+              className="px-3 py-1 text-xs rounded border border-blue-600 text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+            >
+              {recommending ? '추천 중...' : '설명 기반 키워드 추천'}
+            </button>
+          </div>
+
+          {recommendedKeywords.length > 0 && (
+            <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded">
+              <p className="text-xs font-medium text-blue-700 mb-2">AI 추천 키워드</p>
+              <div className="flex flex-wrap gap-2">
+                {recommendedKeywords.map((kw) => {
+                  const selected = form.keywords.includes(kw);
+                  return (
+                    <button
+                      key={kw}
+                      type="button"
+                      onClick={() => toggleKeyword(kw)}
+                      className={`px-3 py-1 rounded-full text-xs border transition-colors ${
+                        selected
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white text-blue-700 border-blue-400 hover:bg-blue-100'
+                      }`}
+                    >
+                      {kw}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2">
             {KEYWORD_SUGGESTIONS.map((kw) => {
               const selected = form.keywords.includes(kw);
