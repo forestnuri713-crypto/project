@@ -20,7 +20,9 @@ import { GuideKind } from '@prisma/client';
 import { AdminService } from './admin.service';
 import { AdminBulkCancelService } from './admin-bulk-cancel.service';
 import { GuideTemplatesService } from './guide-templates.service';
+import { KeywordRecommenderService } from './keyword-recommender.service';
 import { UpsertGuideTemplateDto } from './dto/upsert-guide-template.dto';
+import { RecommendKeywordsDto } from './dto/recommend-keywords.dto';
 import { SettlementsService } from '../settlements/settlements.service';
 import { CategoriesService } from '../categories/categories.service';
 import { AdminQueryProgramsDto } from './dto/admin-query-programs.dto';
@@ -61,6 +63,7 @@ export class AdminController {
     private bulkCancelService: AdminBulkCancelService,
     private categoriesService: CategoriesService,
     private guideTemplatesService: GuideTemplatesService,
+    private keywordRecommenderService: KeywordRecommenderService,
   ) {}
 
   // ─── Dashboard ───────────────────────────────────────
@@ -89,6 +92,13 @@ export class AdminController {
   @ApiOperation({ summary: '프로그램 이미지 업로드 URL (관리자)' })
   requestProgramUploadUrls(@Body() dto: AdminUploadUrlDto) {
     return this.adminService.requestProgramUploadUrls(dto.files);
+  }
+
+  @Post('programs/keywords/recommend')
+  @ApiOperation({ summary: '프로그램 설명 기반 키워드 추천 (LLM)' })
+  async recommendKeywords(@Body() dto: RecommendKeywordsDto) {
+    const keywords = await this.keywordRecommenderService.recommend(dto.description);
+    return { keywords };
   }
 
   @Patch('programs/:id/approve')
