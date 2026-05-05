@@ -4,9 +4,19 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 
-const NAV_ITEMS = [
+interface NavItem {
+  href: string;
+  label: string;
+  children?: { href: string; label: string }[];
+}
+
+const NAV_ITEMS: NavItem[] = [
   { href: '/', label: '대시보드' },
-  { href: '/programs/new', label: '프로그램 등록' },
+  {
+    href: '/programs/new',
+    label: '프로그램 등록',
+    children: [{ href: '/guide-templates', label: '안내 템플릿' }],
+  },
   { href: '/programs/pending', label: '프로그램 승인' },
   { href: '/instructors', label: '강사 관리' },
   { href: '/bulk-cancel', label: '일괄 취소' },
@@ -14,12 +24,14 @@ const NAV_ITEMS = [
   { href: '/users', label: '유저 관리' },
   { href: '/providers', label: 'Provider' },
   { href: '/reviews', label: '리뷰 관리' },
-  { href: '/guide-templates', label: '안내 템플릿' },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { logout } = useAuth();
+
+  const isActive = (href: string) =>
+    href === '/' ? pathname === '/' : pathname.startsWith(href);
 
   return (
     <aside className="w-60 bg-gray-900 text-gray-100 min-h-screen flex flex-col">
@@ -28,22 +40,36 @@ export default function Sidebar() {
       </div>
       <nav className="flex-1 py-4">
         {NAV_ITEMS.map((item) => {
-          const isActive =
-            item.href === '/'
-              ? pathname === '/'
-              : pathname.startsWith(item.href);
+          const active = isActive(item.href);
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`block px-6 py-2.5 text-sm transition-colors ${
-                isActive
-                  ? 'bg-gray-800 text-white font-medium'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-800'
-              }`}
-            >
-              {item.label}
-            </Link>
+            <div key={item.href}>
+              <Link
+                href={item.href}
+                className={`block px-6 py-2.5 text-sm transition-colors ${
+                  active
+                    ? 'bg-gray-800 text-white font-medium'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                }`}
+              >
+                {item.label}
+              </Link>
+              {item.children?.map((child) => {
+                const childActive = isActive(child.href);
+                return (
+                  <Link
+                    key={child.href}
+                    href={child.href}
+                    className={`block pl-10 pr-6 py-2 text-xs transition-colors ${
+                      childActive
+                        ? 'bg-gray-800 text-white font-medium'
+                        : 'text-gray-500 hover:text-white hover:bg-gray-800'
+                    }`}
+                  >
+                    └ {child.label}
+                  </Link>
+                );
+              })}
+            </div>
           );
         })}
       </nav>
