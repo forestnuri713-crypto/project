@@ -172,12 +172,18 @@ export class AttendanceService {
       );
     }
 
+    const programLat = attendance.reservation.program.latitude;
+    const programLng = attendance.reservation.program.longitude;
+    if (programLat === null || programLng === null) {
+      throw new BadRequestException('프로그램 위치 정보가 없어 자동 출석을 사용할 수 없습니다');
+    }
+
     // Haversine distance check: ≤100m from program location
     const distance = this.haversineDistance(
       dto.latitude,
       dto.longitude,
-      attendance.reservation.program.latitude,
-      attendance.reservation.program.longitude,
+      programLat,
+      programLng,
     );
 
     if (distance > AUTO_CHECKIN_RADIUS_METERS) {

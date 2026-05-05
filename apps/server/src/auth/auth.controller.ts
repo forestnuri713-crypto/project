@@ -1,6 +1,7 @@
 import { Body, Controller, Post, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import { EmailLoginDto } from './dto/email-login.dto';
 import { KakaoLoginDto } from './dto/kakao-login.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
@@ -8,6 +9,12 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
+
+  @Post('login')
+  @ApiOperation({ summary: '이메일/비밀번호 로그인' })
+  emailLogin(@Body() dto: EmailLoginDto) {
+    return this.authService.emailLogin(dto);
+  }
 
   @Post('kakao')
   @ApiOperation({ summary: '카카오 로그인' })

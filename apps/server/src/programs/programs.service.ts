@@ -78,6 +78,10 @@ export class ProgramsService {
       throw new ForbiddenException('승인된 강사만 프로그램을 등록할 수 있습니다');
     }
 
+    if (!dto.scheduleAt) {
+      throw new ForbiddenException('진행 일시(scheduleAt)는 필수입니다');
+    }
+
     return this.prisma.program.create({
       data: {
         ...dto,

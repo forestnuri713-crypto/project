@@ -2,15 +2,20 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import * as path from 'path';
+import * as sharp from 'sharp';
 import {
   PROVIDER_COVER_UPLOAD_URL_EXPIRES_IN,
   GALLERY_SIGNED_URL_EXPIRES_IN,
+  GALLERY_UPLOAD_URL_EXPIRES_IN,
+  THUMBNAIL_MAX_WIDTH,
+  THUMBNAIL_QUALITY,
 } from '@sooptalk/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { StorageService } from '../storage/storage.service';
 import { AdminQueryReviewsDto } from './dto/admin-query-reviews.dto';
 import { AdminQueryProgramsDto } from './dto/admin-query-programs.dto';
+import { AdminCreateProgramDto } from './dto/admin-create-program.dto';
 import { RejectProgramDto } from './dto/reject-program.dto';
 import { ChangeRoleDto } from './dto/change-role.dto';
 import { AdminQueryUsersDto } from './dto/admin-query-users.dto';
@@ -25,6 +30,7 @@ import { AdminUpsertProfileDto } from './dto/admin-upsert-profile.dto';
 import { PresignCoverDto } from '../providers/dto/presign-cover.dto';
 import { PublishProfileDto } from '../providers/dto/publish-profile.dto';
 import { refreshProgramReviewStats } from '../reviews/review-stats.util';
+import { expandRecurrence } from './recurrence.util';
 
 @Injectable()
 export class AdminService {
@@ -93,6 +99,121 @@ export class AdminService {
     ]);
 
     return { items, total, page, limit };
+  }
+
+  async createProgram(dto: AdminCreateProgramDto) {
+    const { instructorId, galleryImageKeys, options, recurrence, ...rest } = dto;
+
+    const instructor = await this.prisma.user.findUnique({
+      where: { id: instructorId },
+      select: { id: true, instructorStatus: true },
+    });
+
+    if (!instructor || instructor.instructorStatus !== 'APPROVED') {
+      throw new BadRequestException('승인된 강사만 지정할 수 있습니다');
+    }
+
+    if (!rest.scheduleAt && !recurrence) {
+      throw new BadRequestException('단일 일정 또는 반복 일정 중 하나는 필수입니다');
+    }
+
+    let occurrences: { startAt: Date; endAt: Date | null }[] = [];
+    if (recurrence) {
+      try {
+        occurrences = expandRecurrence(recurrence);
+      } catch (err) {
+        throw new BadRequestException(
+          err instanceof Error ? err.message : '반복 일정 설정이 올바르지 않습니다',
+        );
+      }
+      if (occurrences.length === 0) {
+        throw new BadRequestException('생성될 반복 일정이 없습니다');
+      }
+    }
+
+    const primaryScheduleAt =
+      occurrences.length > 0 ? occurrences[0].startAt : new Date(rest.scheduleAt!);
+
+    const program = await this.prisma.program.create({
+      data: {
+        ...rest,
+        scheduleAt: primaryScheduleAt,
+        instructorId,
+        approvalStatus: 'APPROVED',
+      },
+    });
+
+    if (options && options.length > 0) {
+      await this.prisma.programOption.createMany({
+        data: options.map((o) => ({
+          programId: program.id,
+          name: o.name,
+          priceDiff: o.priceDiff ?? 0,
+          capacity: o.capacity ?? null,
+        })),
+      });
+    }
+
+    if (occurrences.length > 0) {
+      await this.prisma.programSchedule.createMany({
+        data: occurrences.map((o) => ({
+          programId: program.id,
+          startAt: o.startAt,
+          endAt: o.endAt,
+          capacity: recurrence!.capacity,
+          remainingCapacity: recurrence!.capacity,
+        })),
+      });
+    }
+
+    if (galleryImageKeys && galleryImageKeys.length > 0) {
+      await this.createGalleryEntries(program.id, instructorId, galleryImageKeys);
+    }
+
+    return program;
+  }
+
+  async requestProgramUploadUrls(files: { filename: string; contentType: string }[]) {
+    const uploads = await Promise.all(
+      files.map(async (file) => {
+        const ext = path.extname(file.filename);
+        const key = `programs/temp/${randomUUID()}${ext}`;
+        const uploadUrl = await this.storageService.generateUploadUrl(
+          key,
+          file.contentType,
+          GALLERY_UPLOAD_URL_EXPIRES_IN,
+        );
+        return { key, uploadUrl };
+      }),
+    );
+    return { uploads };
+  }
+
+  private async createGalleryEntries(
+    programId: string,
+    uploadedBy: string,
+    imageKeys: string[],
+  ) {
+    await Promise.all(
+      imageKeys.map(async (imageKey) => {
+        const buffer = await this.storageService.downloadObject(imageKey);
+        const thumbnailBuffer = await (sharp as unknown as typeof sharp.default)(buffer)
+          .resize(THUMBNAIL_MAX_WIDTH, null, { withoutEnlargement: true })
+          .jpeg({ quality: THUMBNAIL_QUALITY })
+          .toBuffer();
+
+        const thumbnailKey = imageKey.replace(/(\.[^.]+)$/, '_thumb.jpg');
+        await this.storageService.uploadObject(
+          thumbnailKey,
+          thumbnailBuffer,
+          'image/jpeg',
+        );
+
+        await this.prisma.gallery.create({
+          data: { programId, imageKey, thumbnailKey, uploadedBy },
+        });
+      }),
+    );
   }
 
   async approveProgram(id: string) {

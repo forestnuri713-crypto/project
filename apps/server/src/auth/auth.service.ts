@@ -1,6 +1,14 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmailLoginDto } from './dto/email-login.dto';
 import { KakaoLoginDto } from './dto/kakao-login.dto';
 import { generateUniqueSlug } from '../public/slug.utils';
 
@@ -17,13 +25,26 @@ interface KakaoUserInfo {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private configService: ConfigService,
   ) {}
 
   async kakaoLogin(dto: KakaoLoginDto) {
-    const kakaoUser = await this.getKakaoUserInfo(dto.accessToken);
+    let kakaoAccessToken: string;
+
+    if (dto.code) {
+      kakaoAccessToken = await this.exchangeKakaoCode(dto.code, dto.redirectUri!);
+    } else if (dto.accessToken) {
+      kakaoAccessToken = dto.accessToken;
+    } else {
+      throw new BadRequestException('accessToken 또는 code가 필요합니다');
+    }
+
+    const kakaoUser = await this.getKakaoUserInfo(kakaoAccessToken);
     const kakaoId = String(kakaoUser.id);
     const email = kakaoUser.kakao_account?.email;
     const nickname = kakaoUser.kakao_account?.profile?.nickname ?? '카카오 사용자';
@@ -78,6 +99,24 @@ export class AuthService {
     };
   }
 
+  async emailLogin(dto: EmailLoginDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (!user || !user.password) {
+      throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다');
+    }
+
+    const isMatch = await bcrypt.compare(dto.password, user.password);
+    if (!isMatch) {
+      throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다');
+    }
+
+    const token = this.generateToken(user);
+    return { accessToken: token, user };
+  }
+
   async applyAsInstructor(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
@@ -116,6 +155,39 @@ export class AuthService {
       email: user.email,
       role: user.role,
     });
+  }
+
+  private async exchangeKakaoCode(code: string, redirectUri: string): Promise<string> {
+    const clientId = this.configService.get<string>('KAKAO_REST_API_KEY');
+    if (!clientId) {
+      throw new UnauthorizedException('KAKAO_REST_API_KEY가 설정되지 않았습니다');
+    }
+
+    const params = new URLSearchParams({
+      grant_type: 'authorization_code',
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      code,
+    });
+
+    const response = await fetch('https://kauth.kakao.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' },
+      body: params.toString(),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      this.logger.error(
+        `카카오 토큰 교환 실패: ${response.status} ${JSON.stringify(data)} (redirect_uri: ${redirectUri})`,
+      );
+      throw new UnauthorizedException(
+        `카카오 인가 코드 교환에 실패했습니다: ${data.error_description || data.error || response.status}`,
+      );
+    }
+
+    return data.access_token;
   }
 
   private async getKakaoUserInfo(accessToken: string): Promise<KakaoUserInfo> {

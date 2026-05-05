@@ -131,6 +131,7 @@ enum ReviewStatus {
 model User {
   id                 String   @id @default(uuid())
   email              String   @unique
+  password           String?
   name               String
   role               UserRole
   kakaoId            String?  @unique @map("kakao_id")
@@ -166,8 +167,8 @@ model Program {
   title           String
   description     String
   location        String
-  latitude        Float
-  longitude       Float
+  latitude        Float?
+  longitude       Float?
   price           Int
   maxCapacity     Int            @map("max_capacity")
   minAge          Int            @map("min_age")
@@ -176,7 +177,13 @@ model Program {
   rejectionReason String?        @map("rejection_reason")
   isB2b            Boolean        @default(false) @map("is_b2b")
   safetyGuide      String?        @map("safety_guide")
+  paymentGuide     String?        @map("payment_guide")
+  cancelGuide      String?        @map("cancel_guide")
+  inquiryGuide     String?        @map("inquiry_guide")
   insuranceCovered Boolean        @default(false) @map("insurance_covered")
+  keywords         String[]       @default([])
+  coverImageKey    String?        @map("cover_image_key")
+  bookingDeadlineDays Int?        @map("booking_deadline_days")
   ratingAvg        Float          @default(0) @map("rating_avg")
   reviewCount      Int            @default(0) @map("review_count")
   reservedCount    Int            @default(0) @map("reserved_count")
@@ -193,6 +200,7 @@ model Program {
   reviews        Review[]
   bulkCancelJobs BulkCancelJob[]
   categories     ProgramCategory[]
+  options        ProgramOption[]
 
   @@index([approvalStatus])
   @@map("programs")
@@ -528,4 +536,35 @@ model SlugHistory {
   user User @relation(fields: [userId], references: [id])
 
   @@map("slug_histories")
+}
+
+model ProgramOption {
+  id        String   @id @default(uuid())
+  programId String   @map("program_id")
+  name      String
+  priceDiff Int      @default(0) @map("price_diff")
+  capacity  Int?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@map("program_options")
+}
+
+enum GuideKind {
+  SAFETY
+  PAYMENT
+  CANCEL
+  INQUIRY
+}
+
+model GuideTemplate {
+  id        String    @id @default(uuid())
+  kind      GuideKind @unique
+  content   String
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@map("guide_templates")
 }

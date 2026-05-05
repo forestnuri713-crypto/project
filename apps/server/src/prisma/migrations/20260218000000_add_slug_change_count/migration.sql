@@ -1,1 +1,0 @@
-ALTER TABLE "users" ADD COLUMN "slug_change_count" INTEGER NOT NULL DEFAULT 0;

@@ -16,11 +16,18 @@ import { UserRole } from '@sooptalk/shared';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { GuideKind } from '@prisma/client';
 import { AdminService } from './admin.service';
 import { AdminBulkCancelService } from './admin-bulk-cancel.service';
+import { GuideTemplatesService } from './guide-templates.service';
+import { KeywordRecommenderService } from './keyword-recommender.service';
+import { UpsertGuideTemplateDto } from './dto/upsert-guide-template.dto';
+import { RecommendKeywordsDto } from './dto/recommend-keywords.dto';
 import { SettlementsService } from '../settlements/settlements.service';
 import { CategoriesService } from '../categories/categories.service';
 import { AdminQueryProgramsDto } from './dto/admin-query-programs.dto';
+import { AdminCreateProgramDto } from './dto/admin-create-program.dto';
+import { AdminUploadUrlDto } from './dto/admin-upload-url.dto';
 import { RejectProgramDto } from './dto/reject-program.dto';
 import { ChangeRoleDto } from './dto/change-role.dto';
 import { AdminQueryUsersDto } from './dto/admin-query-users.dto';
@@ -55,6 +62,8 @@ export class AdminController {
     private settlementsService: SettlementsService,
     private bulkCancelService: AdminBulkCancelService,
     private categoriesService: CategoriesService,
+    private guideTemplatesService: GuideTemplatesService,
+    private keywordRecommenderService: KeywordRecommenderService,
   ) {}
 
   // ─── Dashboard ───────────────────────────────────────
@@ -71,6 +80,25 @@ export class AdminController {
   @ApiOperation({ summary: '프로그램 목록 (관리자)' })
   findPrograms(@Query() query: AdminQueryProgramsDto) {
     return this.adminService.findPrograms(query);
+  }
+
+  @Post('programs')
+  @ApiOperation({ summary: '프로그램 등록 (관리자)' })
+  createProgram(@Body() dto: AdminCreateProgramDto) {
+    return this.adminService.createProgram(dto);
+  }
+
+  @Post('programs/upload-url')
+  @ApiOperation({ summary: '프로그램 이미지 업로드 URL (관리자)' })
+  requestProgramUploadUrls(@Body() dto: AdminUploadUrlDto) {
+    return this.adminService.requestProgramUploadUrls(dto.files);
+  }
+
+  @Post('programs/keywords/recommend')
+  @ApiOperation({ summary: '프로그램 설명 기반 키워드 추천 (LLM)' })
+  async recommendKeywords(@Body() dto: RecommendKeywordsDto) {
+    const keywords = await this.keywordRecommenderService.recommend(dto.description);
+    return { keywords };
   }
 
   @Patch('programs/:id/approve')
@@ -306,5 +334,25 @@ export class AdminController {
   @ApiOperation({ summary: '현재 환불 모드 조회' })
   getRefundMode() {
     return this.bulkCancelService.getRefundMode();
+  }
+
+  // ─── Guide Templates ─────────────────────────────────
+
+  @Get('guide-templates')
+  @ApiOperation({ summary: '안내 템플릿 전체 조회' })
+  findGuideTemplates() {
+    return this.guideTemplatesService.findAll();
+  }
+
+  @Get('guide-templates/:kind')
+  @ApiOperation({ summary: '특정 안내 템플릿 조회' })
+  findGuideTemplate(@Param('kind') kind: GuideKind) {
+    return this.guideTemplatesService.findOne(kind);
+  }
+
+  @Put('guide-templates')
+  @ApiOperation({ summary: '안내 템플릿 등록/수정 (kind별 upsert)' })
+  upsertGuideTemplate(@Body() dto: UpsertGuideTemplateDto) {
+    return this.guideTemplatesService.upsert(dto);
   }
 }

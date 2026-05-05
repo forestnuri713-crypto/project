@@ -1,8 +1,14 @@
 # 숲똑 (SoopTalk) — 프로젝트 현황
 
+<<<<<<< sprint-22/seo-sitemap
 > 최종 업데이트: 2026-02-18
 > 빌드 상태: `tsc --noEmit` PASS (server + admin)
 > 커밋: `eca4ed1` (main)
+=======
+> 최종 업데이트: 2026-02-22
+> 빌드 상태: `tsc --noEmit` PASS (server + admin) | `next build` PASS (web)
+> 커밋: `f3d6ede` (sprint-24/sitemap-instructor-adapter)
+>>>>>>> main
 
 ---
 
@@ -42,7 +48,14 @@
 | Sprint 20 M3 | One-Time Slug Update | 완료 |
 | Sprint 20 M4 | Slug History Redirects | 완료 |
 | Sprint 21 M1 | SEO Meta Foundation (apps/web / instructors slug meta) | 완료 |
+<<<<<<< sprint-22/seo-sitemap
 | Sprint 22 | SEO Expansion: Dynamic Sitemap Foundation (static-only, apps/web) | 완료 |
+=======
+| Sprint 22 | Sitemap foundation (static-only) | 완료 |
+| Sprint 23 | Public Instructor List API (apps/server, cursor pagination) | 완료 |
+| Sprint 24 | Wire sitemap adapter to real instructor list endpoint | 완료 |
+| Infra | Render 배포 준비 (start:prod migrate deploy + 설정 문서화) | 완료 |
+>>>>>>> main
 
 ---
 
@@ -666,6 +679,7 @@ Backend/DB/예약 시스템은 변경하지 않으며, 기존 redirect 및 APPRO
 
 ---
 
+<<<<<<< sprint-22/seo-sitemap
 ## Sprint 22 — SEO Expansion: Dynamic Sitemap Foundation (완료)
 
 ### 개요
@@ -709,5 +723,103 @@ apps/web에 Next.js App Router 기반 sitemap 엔드포인트(`/sitemap.xml`) �
  -   R e q u i r e   b r a n c h e s   t o   b e   u p   t o   d a t e   b e f o r e   m e r g i n g :   O N 
  -   B l o c k   f o r c e   p u s h e s :   O N 
  -   R e s t r i c t   d e l e t i o n s :   O N 
-  
  
+ 
+ 
+=======
+## Sprint 23 — Public Instructor List API (완료)
+
+### 개요
+apps/web 사이트맵 어댑터 연결(Sprint 24)을 위한 공개 강사 열거 엔드포인트. apps/server only.
+
+### 주요 변경
+
+| 항목 | 내용 |
+|------|------|
+| `GET /public/instructors` | 커서 기반 페이지네이션 (updatedAt DESC, id DESC) |
+| 필터링 | `instructorStatus: 'APPROVED'` + `slug: { not: null }` (hardcoded) |
+| 응답 형태 | `{ success, data: { items: [{slug, updatedAt}], nextCursor, hasMore } }` |
+| 커서 인코딩 | `base64url(updatedAt\|id)` — 무효 커서 시 첫 페이지 반환 (dev-only 경고) |
+| 기존 엔드포인트 | `GET /public/instructors/:slug` **무변경** (308 redirect + 404 보존) |
+
+### 변경 파일 (apps/server only, 4개)
+
+**신규 (2개):**
+- `apps/server/src/public/dto/query-public-instructors.dto.ts`
+- `apps/server/test/public-instructor-list.spec.ts` — 10개 테스트
+
+**수정 (2개):**
+- `apps/server/src/public/public.controller.ts` — `@Get('instructors')` 추가 (`:slug` 앞 선언)
+- `apps/server/src/public/public.service.ts` — `listApprovedInstructors()` + 커서 encode/decode
+
+### 검증 결과
+- `tsc --noEmit`: PASS
+- `jest`: 23 suites, 199 tests — ALL PASS
+- 기존 `GET /public/instructors/:slug` 테스트: **무변경, 통과**
+- apps/web: **무변경**
+
+---
+
+## Sprint 24 — Sitemap Instructor Adapter (완료)
+
+### 개요
+apps/web 사이트맵을 실제 `GET /public/instructors` 엔드포인트에 연결. apps/web only.
+
+### 주요 변경
+
+| 항목 | 내용 |
+|------|------|
+| `instructors.adapter.ts` | 커서 페이지네이션 전체 소진 (최대 1000페이지, limit 100), 슬러그 deduplicate, 에러 시 빈 목록 fallback |
+| `sitemap.ts` | Next.js Metadata Route — 정적 URL(/) + 강사 프로필 URL (`/instructors/{slug}`), 24h ISR revalidation |
+| Fallback | `NEXT_PUBLIC_API_URL` 미설정 또는 fetch 실패 시 정적 URL만 렌더링, 빌드 미중단 |
+
+### 변경 파일 (apps/web only, 2개 신규)
+
+- `apps/web/src/lib/instructors.adapter.ts` — 신규
+- `apps/web/src/app/sitemap.ts` — 신규
+
+### 검증 결과
+- `cd apps/web && pnpm build`: PASS (`○ /sitemap.xml` 정적 프리렌더링 확인)
+- `tsc --noEmit`: PASS
+- Backend/DB: **무변경**
+
+---
+
+## Infra — Render 배포 준비 (완료)
+
+### 개요
+apps/server를 Render Web Service로 배포하기 위한 최소 설정. 코드 변경 1줄 + 배포 설정 문서화.
+
+### 주요 변경
+
+| 항목 | 내용 |
+|------|------|
+| `start:prod` 수정 | `prisma migrate deploy … && node dist/main` — 배포 시 마이그레이션 자동 적용 |
+| PORT 바인딩 | `main.ts`가 이미 `process.env.PORT \|\| 3000` 사용 — 추가 변경 불필요 |
+
+### Render 설정 (확정)
+
+| 항목 | 값 |
+|------|----|
+| Root Directory | *(repo root)* |
+| Build Command | `pnpm install --frozen-lockfile && pnpm -C apps/server run prisma:generate && pnpm -C apps/server run build` |
+| Start Command | `pnpm -C apps/server run start:prod` |
+
+### 필수 환경변수 (Render Environment 탭)
+
+`DATABASE_URL`, `NODE_ENV=production`, `JWT_SECRET`, `KAKAO_REST_API_KEY`, `REDIS_URL`, `PORTONE_API_SECRET`, `PORTONE_STORE_ID`, `PORTONE_CHANNEL_KEY`, `PORTONE_WEBHOOK_SECRET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_REGION`, `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`
+
+### 변경 파일 (1개)
+
+- `apps/server/package.json` — `start:prod` 스크립트 수정 (`f3d6ede`)
+# #   R e p o   G u a r d r a i l s   ( v e r i f i e d   2 0 2 6 - 0 2 - 1 6 ) 
+ -   B r a n c h   p r o t e c t i o n :   m a i n 
+ -   R e q u i r e   s t a t u s   c h e c k s :   W e b   E 2 E   T e s t s   ( . g i t h u b / w o r k f l o w s / w e b - e 2 e . y m l ) 
+ -   R e q u i r e   c o n v e r s a t i o n   r e s o l u t i o n :   O N 
+ -   R e q u i r e   b r a n c h e s   t o   b e   u p   t o   d a t e   b e f o r e   m e r g i n g :   O N 
+ -   B l o c k   f o r c e   p u s h e s :   O N 
+ -   R e s t r i c t   d e l e t i o n s :   O N 
+ 
+ 
+ 
+>>>>>>> main
