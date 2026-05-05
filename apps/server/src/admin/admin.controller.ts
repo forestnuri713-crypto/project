@@ -6,7 +6,6 @@ import {
   Param,
   Patch,
   Post,
-  Put,
   Query,
   Request,
   UseGuards,
@@ -21,7 +20,8 @@ import { AdminService } from './admin.service';
 import { AdminBulkCancelService } from './admin-bulk-cancel.service';
 import { GuideTemplatesService } from './guide-templates.service';
 import { KeywordRecommenderService } from './keyword-recommender.service';
-import { UpsertGuideTemplateDto } from './dto/upsert-guide-template.dto';
+import { CreateGuideTemplateDto } from './dto/create-guide-template.dto';
+import { UpdateGuideTemplateDto } from './dto/update-guide-template.dto';
 import { RecommendKeywordsDto } from './dto/recommend-keywords.dto';
 import { SettlementsService } from '../settlements/settlements.service';
 import { CategoriesService } from '../categories/categories.service';
@@ -344,15 +344,33 @@ export class AdminController {
     return this.guideTemplatesService.findAll();
   }
 
-  @Get('guide-templates/:kind')
-  @ApiOperation({ summary: '특정 안내 템플릿 조회' })
-  findGuideTemplate(@Param('kind') kind: GuideKind) {
-    return this.guideTemplatesService.findOne(kind);
+  @Get('guide-templates/by-kind/:kind')
+  @ApiOperation({ summary: '카테고리별 안내 템플릿 목록 조회' })
+  findGuideTemplatesByKind(@Param('kind') kind: GuideKind) {
+    return this.guideTemplatesService.findByKind(kind);
   }
 
-  @Put('guide-templates')
-  @ApiOperation({ summary: '안내 템플릿 등록/수정 (kind별 upsert)' })
-  upsertGuideTemplate(@Body() dto: UpsertGuideTemplateDto) {
-    return this.guideTemplatesService.upsert(dto);
+  @Get('guide-templates/:id')
+  @ApiOperation({ summary: '안내 템플릿 단건 조회' })
+  findGuideTemplate(@Param('id') id: string) {
+    return this.guideTemplatesService.findOne(id);
+  }
+
+  @Post('guide-templates')
+  @ApiOperation({ summary: '안내 템플릿 생성' })
+  createGuideTemplate(@Body() dto: CreateGuideTemplateDto) {
+    return this.guideTemplatesService.create(dto);
+  }
+
+  @Patch('guide-templates/:id')
+  @ApiOperation({ summary: '안내 템플릿 수정' })
+  updateGuideTemplate(@Param('id') id: string, @Body() dto: UpdateGuideTemplateDto) {
+    return this.guideTemplatesService.update(id, dto);
+  }
+
+  @Delete('guide-templates/:id')
+  @ApiOperation({ summary: '안내 템플릿 삭제' })
+  removeGuideTemplate(@Param('id') id: string) {
+    return this.guideTemplatesService.remove(id);
   }
 }

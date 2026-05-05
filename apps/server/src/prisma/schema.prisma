@@ -561,10 +561,13 @@ enum GuideKind {
 
 model GuideTemplate {
   id        String    @id @default(uuid())
-  kind      GuideKind @unique
+  kind      GuideKind
+  title     String
   content   String
+  isDefault Boolean   @default(false) @map("is_default")
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 
+  @@index([kind])
   @@map("guide_templates")
 }
