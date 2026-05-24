@@ -13,25 +13,36 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: '/', label: '대시보드' },
   {
-    href: '/programs/new',
-    label: '프로그램 등록',
-    children: [{ href: '/guide-templates', label: '안내 템플릿' }],
+    href: '/programs',
+    label: '프로그램',
+    children: [
+      { href: '/programs/create', label: '프로그램 등록' },
+    ],
   },
-  { href: '/programs/pending', label: '프로그램 승인' },
+  { href: '/reservations', label: '예약 관리' },
+  { href: '/users', label: '사용자 관리' },
+];
+
+const EXTRA_NAV_ITEMS: NavItem[] = [
+  { href: '/programs/pending', label: '프로그램 승인 (구)' },
   { href: '/instructors', label: '강사 관리' },
-  { href: '/bulk-cancel', label: '일괄 취소' },
   { href: '/settlements', label: '정산' },
-  { href: '/users', label: '유저 관리' },
-  { href: '/providers', label: 'Provider' },
-  { href: '/reviews', label: '리뷰 관리' },
+  { href: '/reviews', label: '리뷰' },
+  { href: '/providers', label: '업체' },
+  { href: '/bulk-cancel', label: '일괄 취소' },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { logout } = useAuth();
+  const { signOut, logout } = useAuth();
 
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname.startsWith(href);
+
+  const handleLogout = async () => {
+    await signOut();
+    logout();
+  };
 
   return (
     <aside className="w-60 bg-gray-900 text-gray-100 min-h-screen flex flex-col">
@@ -72,10 +83,27 @@ export default function Sidebar() {
             </div>
           );
         })}
+
+        <div className="mt-4 mx-4 border-t border-gray-700 pt-4">
+          <p className="px-2 text-xs text-gray-600 mb-2">기존 메뉴</p>
+          {EXTRA_NAV_ITEMS.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`block px-2 py-1.5 text-xs transition-colors rounded ${
+                isActive(item.href)
+                  ? 'bg-gray-800 text-gray-300'
+                  : 'text-gray-600 hover:text-gray-400 hover:bg-gray-800'
+              }`}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
       </nav>
       <div className="px-6 py-4 border-t border-gray-700">
         <button
-          onClick={logout}
+          onClick={handleLogout}
           className="text-sm text-gray-400 hover:text-white transition-colors"
         >
           로그아웃
