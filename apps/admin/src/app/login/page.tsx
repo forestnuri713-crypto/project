@@ -3,98 +3,49 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { api, ApiError } from '@/services/api';
-
-const KAKAO_JS_KEY = process.env.NEXT_PUBLIC_KAKAO_JS_KEY || '';
-const KAKAO_REDIRECT_URI = process.env.NEXT_PUBLIC_KAKAO_REDIRECT_URI || '';
-
-declare global {
-  interface Window {
-    Kakao: any;
-  }
-}
+import { supabase } from '@/lib/supabase';
 
 export default function LoginPage() {
-  const { user, isLoading, login } = useAuth();
+  const { user, isLoading } = useAuth();
   const router = useRouter();
-  const [sdkReady, setSdkReady] = useState(false);
-  const [sdkError, setSdkError] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && user?.role === 'ADMIN') {
+    if (!isLoading && user) {
       router.replace('/');
     }
   }, [user, isLoading, router]);
-
-  useEffect(() => {
-    if (!KAKAO_JS_KEY) {
-      setSdkError('카카오 API 키가 설정되지 않았습니다');
-      return;
-    }
-
-    if (window.Kakao) {
-      if (!window.Kakao.isInitialized()) {
-        window.Kakao.init(KAKAO_JS_KEY);
-      }
-      setSdkReady(true);
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = 'https://t1.kakaocdn.net/kakao_js_sdk/2.7.4/kakao.min.js';
-    script.onload = () => {
-      if (window.Kakao && !window.Kakao.isInitialized()) {
-        window.Kakao.init(KAKAO_JS_KEY);
-      }
-      setSdkReady(true);
-    };
-    script.onerror = () => {
-      setSdkError('Kakao SDK를 불러오지 못했습니다');
-    };
-    document.head.appendChild(script);
-  }, []);
-
-  const handleKakaoLogin = () => {
-    if (!window.Kakao || !window.Kakao.isInitialized()) {
-      setSdkError('Kakao SDK가 로드되지 않았습니다. 페이지를 새로고침 해주세요.');
-      return;
-    }
-
-    const redirectUri = KAKAO_REDIRECT_URI || `${window.location.origin}/login/callback`;
-    window.Kakao.Auth.authorize({ redirectUri });
-  };
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
     setLoginLoading(true);
 
-    try {
-      const res = await api.post<{ accessToken: string; user: any }>('/auth/login', {
-        email,
-        password,
-      });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-      if (res.user.role !== 'ADMIN') {
-        setLoginError('관리자 권한이 없습니다');
-        return;
-      }
-
-      login(res.accessToken, res.user);
-      router.replace('/');
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setLoginError(err.message);
-      } else {
-        setLoginError('로그인에 실패했습니다');
-      }
-    } finally {
+    if (error || !data.session) {
+      setLoginError(error?.message ?? '로그인에 실패했습니다');
       setLoginLoading(false);
+      return;
     }
+
+    const { data: profile } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', data.session.user.id)
+      .maybeSingle();
+
+    if (!profile || (profile.role !== 'super_admin' && profile.role !== 'operator')) {
+      await supabase.auth.signOut();
+      setLoginError('관리자 권한이 없습니다');
+      setLoginLoading(false);
+      return;
+    }
+
+    router.replace('/');
   };
 
   if (isLoading) return null;
@@ -105,33 +56,27 @@ export default function LoginPage() {
         <h1 className="text-2xl font-bold text-center mb-2">숲똑 Admin</h1>
         <p className="text-sm text-gray-500 text-center mb-8">관리자 로그인</p>
 
-        {(sdkError || loginError) && (
-          <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded">
-            {loginError || sdkError}
-          </div>
+        {loginError && (
+          <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded">{loginError}</div>
         )}
 
-        <form onSubmit={handleEmailLogin} className="space-y-4 mb-6">
-          <div>
-            <input
-              type="email"
-              placeholder="이메일"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
-            />
-          </div>
-          <div>
-            <input
-              type="password"
-              placeholder="비밀번호"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
-            />
-          </div>
+        <form onSubmit={handleEmailLogin} className="space-y-4">
+          <input
+            type="email"
+            placeholder="이메일"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+          />
+          <input
+            type="password"
+            placeholder="비밀번호"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+          />
           <button
             type="submit"
             disabled={loginLoading}
@@ -141,22 +86,11 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="relative mb-6">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-300" />
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-white text-gray-500">또는</span>
-          </div>
-        </div>
-
-        <button
-          onClick={handleKakaoLogin}
-          disabled={!sdkReady}
-          className="w-full py-3 bg-yellow-400 hover:bg-yellow-500 disabled:bg-gray-300 disabled:cursor-not-allowed text-gray-900 font-medium rounded-lg transition-colors"
-        >
-          {sdkReady ? '카카오로 로그인' : '로딩 중...'}
-        </button>
+        {/*
+          카카오 로그인은 Supabase Auth 전환 중 임시 비활성화.
+          - Supabase는 카카오를 기본 OAuth 프로바이더로 지원하지 않음
+          - 추후 커스텀 OIDC 또는 별도 인증 흐름으로 재도입 예정
+        */}
       </div>
     </div>
   );

@@ -9,7 +9,7 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading && (!user || user.role !== 'ADMIN')) {
+    if (!isLoading && !user) {
       router.replace('/login');
     }
   }, [user, isLoading, router]);
@@ -22,7 +22,7 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!user || user.role !== 'ADMIN') {
+  if (!user) {
     return null;
   }
 

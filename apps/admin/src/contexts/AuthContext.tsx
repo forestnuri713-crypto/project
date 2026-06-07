@@ -1,58 +1,79 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import type { Session } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 
-interface User {
+type AdminRole = 'super_admin' | 'operator';
+
+interface AdminUser {
   id: string;
   email: string;
   name: string;
-  role: string;
+  role: AdminRole;
 }
 
 interface AuthContextType {
-  user: User | null;
-  token: string | null;
+  user: AdminUser | null;
+  session: Session | null;
   isLoading: boolean;
-  login: (token: string, user: User) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
-  token: null,
+  session: null,
   isLoading: true,
-  login: () => {},
-  logout: () => {},
+  logout: async () => {},
 });
 
+async function fetchAdminProfile(userId: string): Promise<AdminUser | null> {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, email, name, role')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  if (data.role !== 'super_admin' && data.role !== 'operator') return null;
+
+  return data as AdminUser;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<AdminUser | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // 임시: 카카오 로그인 수정 전까지 인증 우회
-    setUser({ id: 'dev', email: 'dev@admin', name: 'Dev Admin', role: 'ADMIN' });
-    setToken('dev-token');
-    setIsLoading(false);
+    let cancelled = false;
+
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (cancelled) return;
+      setSession(data.session);
+      if (data.session) {
+        setUser(await fetchAdminProfile(data.session.user.id));
+      }
+      setIsLoading(false);
+    });
+
+    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+      setSession(nextSession);
+      setUser(nextSession ? await fetchAdminProfile(nextSession.user.id) : null);
+    });
+
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
-  const login = useCallback((newToken: string, newUser: User) => {
-    setToken(newToken);
-    setUser(newUser);
-    localStorage.setItem('token', newToken);
-    localStorage.setItem('user', JSON.stringify(newUser));
-  }, []);
-
-  const logout = useCallback(() => {
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+  const logout = useCallback(async () => {
+    await supabase.auth.signOut();
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, session, isLoading, logout }}>
       {children}
     </AuthContext.Provider>
   );
